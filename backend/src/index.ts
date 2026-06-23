@@ -73,9 +73,11 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`K-CONNECT API Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`K-CONNECT API Server running on port ${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  });
+}
 
 export default app;
