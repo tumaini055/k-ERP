@@ -20,7 +20,8 @@ export default function Login() {
       await login(email, password);
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Login failed. Please check your credentials.');
+      const errMsg = err?.response?.data?.error;
+      setError(typeof errMsg === 'string' ? errMsg : 'Login failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }
