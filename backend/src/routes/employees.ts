@@ -133,15 +133,16 @@ router.get('/:id', checkPermission('employees', 'canView'), async (req: AuthRequ
       return;
     }
 
-    const safeQuery = async (table: string, column = 'user_id') => {
+    const safeQuery = async (table: string, column = 'user_id', single = false) => {
       try {
-        const { data } = await supabase.from(table).select('*').eq(column, req.params.id);
-        return data || [];
-      } catch { return []; }
+        const q = supabase.from(table).select('*').eq(column, req.params.id);
+        const { data } = single ? await q.maybeSingle() : await q;
+        return data || (single ? null : []);
+      } catch { return single ? null : []; }
     };
 
     const [contract, attendance, leave_requests, evaluations] = await Promise.all([
-      supabase.from('employee_contracts').select('*').eq('user_id', req.params.id).maybeSingle().then(r => r.data).catch(() => null),
+      safeQuery('employee_contracts', 'user_id', true),
       safeQuery('attendance'),
       safeQuery('leave_requests'),
       safeQuery('performance_evaluations'),
