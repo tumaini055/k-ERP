@@ -92,16 +92,11 @@ app.get(`${apiPrefix}/health`, (_req, res) => {
   });
 });
 
-app.post(`${apiPrefix}/debug-body`, (req, res) => {
-  res.json({ body: req.body, keys: req.body ? Object.keys(req.body) : [], type: typeof req.body });
-});
-
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('Unhandled error:', err);
   res.status(500).json({
     error: 'Internal server error',
-    message: err?.message || undefined,
-    stack: err?.stack?.split('\n').slice(0, 3).join('\n') || undefined,
+    message: process.env.NODE_ENV === 'development' ? err.message : undefined,
   });
 });
 
