@@ -1,4 +1,5 @@
 import api from '../lib/api';
+import { CompanySettings } from '../types';
 
 export const dataService = {
   // Customers
@@ -504,5 +505,15 @@ export const dataService = {
     return api.post(`/documents/${id}/versions`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
+  },
+
+  // Settings
+  async getSettings() {
+    const { data } = await api.get('/settings');
+    return data;
+  },
+  async updateSettings(settings: CompanySettings) {
+    const { data } = await api.put('/settings', { settings });
+    return data;
   },
 };

@@ -15,6 +15,7 @@ import Contracts from './pages/Contracts';
 import Documents from './pages/Documents';
 import Reports from './pages/Reports';
 import Calendar from './pages/Calendar';
+import Settings from './pages/Settings';
 
 export default function App() {
   return (
@@ -43,6 +44,7 @@ export default function App() {
             <Route path="documents" element={<Documents />} />
             <Route path="calendar" element={<Calendar />} />
             <Route path="reports" element={<Reports />} />
+            <Route path="settings" element={<Settings />} />
           </Route>
         </Routes>
       </AuthProvider>

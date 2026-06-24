@@ -309,6 +309,22 @@ export interface Lead {
 
 export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'proposal' | 'negotiation' | 'won' | 'lost';
 
+export interface CompanySettings {
+  company_name?: string;
+  company_email?: string;
+  company_phone?: string;
+  company_address?: string;
+  company_website?: string;
+  tax_id?: string;
+  currency?: string;
+  date_format?: string;
+  timezone?: string;
+  language?: string;
+  invoice_prefix?: string;
+  invoice_terms?: string;
+  default_tax_rate?: number;
+}
+
 export interface CalendarEvent {
   id: string;
   source: 'event' | 'task' | 'milestone' | 'contract' | 'leave' | 'ticket';

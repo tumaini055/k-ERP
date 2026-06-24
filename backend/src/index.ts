@@ -22,6 +22,7 @@ import documentRoutes from './routes/documents';
 import contractRoutes from './routes/contracts';
 import eventRoutes from './routes/events';
 import reportRoutes from './routes/reports';
+import settingsRoutes from './routes/settings';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -70,6 +71,7 @@ app.use(`${apiPrefix}/documents`, documentRoutes);
 app.use(`${apiPrefix}/contracts`, contractRoutes);
 app.use(`${apiPrefix}/events`, eventRoutes);
 app.use(`${apiPrefix}/reports`, reportRoutes);
+app.use(`${apiPrefix}/settings`, settingsRoutes);
 
 app.get(`${apiPrefix}/health`, (_req, res) => {
   res.json({
