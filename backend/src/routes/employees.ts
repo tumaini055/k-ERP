@@ -206,56 +206,45 @@ router.post('/attendance', checkPermission('employees', 'canCreate'), async (req
 });
 
 router.delete('/:id', checkPermission('employees', 'canDelete'), async (req: AuthRequest, res: Response) => {
+  const userId = req.params.id;
+
+  const safeNullify = async (table: string, column: string) => {
+    try {
+      await supabase.from(table).update({ [column]: null }).eq(column, userId);
+    } catch {}
+  };
+
+  const safeDelete = async (table: string, column: string) => {
+    try {
+      await supabase.from(table).delete().eq(column, userId);
+    } catch {}
+  };
+
   try {
-    const userId = req.params.id;
+    // Null out audit/reference columns where user is referenced
+    await Promise.all([
+      safeNullify('invoices', 'created_by'),
+      safeNullify('expenses', 'created_by'),
+      safeNullify('expenses', 'approved_by'),
+      safeNullify('payments', 'received_by'),
+      safeNullify('projects', 'manager_id'),
+      safeNullify('project_tasks', 'assigned_to'),
+      safeNullify('documents', 'uploaded_by'),
+      safeNullify('contracts', 'created_by'),
+      safeNullify('events', 'created_by'),
+      safeNullify('support_tickets', 'assigned_to'),
+      safeNullify('ticket_responses', 'user_id'),
+      safeNullify('leave_requests', 'approved_by'),
+      safeNullify('performance_evaluations', 'reviewer_id'),
+    ]);
 
-    // Null out audit/reference columns on tables that FK to users(id) without CASCADE
-    const nullifyRefs: { table: string; column: string }[] = [
-      { table: 'invoices', column: 'created_by' },
-      { table: 'expenses', column: 'created_by' },
-      { table: 'expenses', column: 'approved_by' },
-      { table: 'payments', column: 'received_by' },
-      { table: 'projects', column: 'manager_id' },
-      { table: 'project_tasks', column: 'assigned_to' },
-      { table: 'project_documents', column: 'uploaded_by' },
-      { table: 'documents', column: 'uploaded_by' },
-      { table: 'contracts', column: 'created_by' },
-      { table: 'contract_documents', column: 'uploaded_by' },
-      { table: 'events', column: 'created_by' },
-      { table: 'event_documents', column: 'uploaded_by' },
-      { table: 'support_tickets', column: 'assigned_to' },
-      { table: 'support_tickets', column: 'escalated_by' },
-      { table: 'support_tickets', column: 'escalated_to' },
-      { table: 'ticket_responses', column: 'user_id' },
-      { table: 'leave_requests', column: 'approved_by' },
-      { table: 'performance_evaluations', column: 'reviewer_id' },
-      { table: 'audit_logs', column: 'performed_by' },
-      { table: 'audit_logs', column: 'created_by' },
-      { table: 'company_settings', column: 'created_by' },
-      { table: 'procurement_requests', column: 'created_by' },
-      { table: 'procurement_requests', column: 'approved_by' },
-      { table: 'isp_subscribers', column: 'created_by' },
-    ];
-
-    for (const ref of nullifyRefs) {
-      const { error } = await supabase
-        .from(ref.table)
-        .update({ [ref.column]: null })
-        .eq(ref.column, userId);
-      if (error && error.code !== '42P01' && error.code !== 'PGRST205') throw error;
-    }
-
-    // Delete owned records (where user IS the subject)
-    const deleteOwned: { table: string; column: string }[] = [
-      { table: 'attendance', column: 'user_id' },
-      { table: 'time_entries', column: 'user_id' },
-      { table: 'notifications', column: 'user_id' },
-      { table: 'user_sessions', column: 'user_id' },
-    ];
-    for (const rel of deleteOwned) {
-      const { error } = await supabase.from(rel.table).delete().eq(rel.column, userId);
-      if (error && error.code !== '42P01' && error.code !== 'PGRST205') throw error;
-    }
+    // Delete owned records
+    await Promise.all([
+      safeDelete('attendance', 'user_id'),
+      safeDelete('time_entries', 'user_id'),
+      safeDelete('notifications', 'user_id'),
+      safeDelete('user_sessions', 'user_id'),
+    ]);
 
     const { error } = await supabase.from('users').delete().eq('id', userId);
     if (error) throw error;
