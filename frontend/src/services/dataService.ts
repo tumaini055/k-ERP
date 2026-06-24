@@ -526,4 +526,40 @@ export const dataService = {
     const { data } = await api.put('/settings', { settings });
     return data;
   },
+
+  // Departments
+  async getDepartments() {
+    const { data } = await api.get('/company/departments');
+    return data;
+  },
+  async createDepartment(body: any) {
+    const { data } = await api.post('/company/departments', body);
+    return data;
+  },
+  async updateDepartment(id: string, body: any) {
+    const { data } = await api.put(`/company/departments/${id}`, body);
+    return data;
+  },
+  async deleteDepartment(id: string) {
+    const { data } = await api.delete(`/company/departments/${id}`);
+    return data;
+  },
+
+  // Positions
+  async getPositions(params?: any) {
+    const { data } = await api.get('/company/positions', { params });
+    return data;
+  },
+  async createPosition(body: any) {
+    const { data } = await api.post('/company/positions', body);
+    return data;
+  },
+  async updatePosition(id: string, body: any) {
+    const { data } = await api.put(`/company/positions/${id}`, body);
+    return data;
+  },
+  async deletePosition(id: string) {
+    const { data } = await api.delete(`/company/positions/${id}`);
+    return data;
+  },
 };

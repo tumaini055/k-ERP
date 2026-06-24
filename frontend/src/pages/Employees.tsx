@@ -46,6 +46,8 @@ export default function Employees() {
   const [detailTab, setDetailTab] = useState<'overview' | 'contract' | 'attendance' | 'leave'>('overview');
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [departmentsList, setDepartmentsList] = useState<any[]>([]);
+  const [positionsList, setPositionsList] = useState<any[]>([]);
   const generateEmployeeId = () => `EMP-${Date.now().toString().slice(-6)}`;
   const generatePassword = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
@@ -57,6 +59,17 @@ export default function Employees() {
     first_name: '', last_name: '', email: '', phone: '', password: generatePassword(),
     role: 'engineer', department: '', position: '', employee_id: generateEmployeeId(),
   });
+
+  const fetchDepartmentsAndPositions = async () => {
+    try {
+      const [deptRes, posRes] = await Promise.all([
+        dataService.getDepartments(),
+        dataService.getPositions(),
+      ]);
+      setDepartmentsList(deptRes.data || []);
+      setPositionsList(posRes.data || []);
+    } catch (error) { console.error(error); }
+  };
 
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -76,10 +89,9 @@ export default function Employees() {
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
 
-  const departments = [...new Set(employees.map(e => e.department).filter(Boolean))] as string[];
   const roles = [...new Set(employees.map(e => e.role).filter(r => r !== 'customer'))] as string[];
 
-  useEffect(() => { fetchAll(); }, [search, departmentFilter, roleFilter]);
+  useEffect(() => { fetchAll(); fetchDepartmentsAndPositions(); }, [search, departmentFilter, roleFilter]);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -118,7 +130,11 @@ export default function Employees() {
     setDetailTab('overview');
     setEditing(false);
     try {
-      const { data } = await dataService.getEmployee(emp.id);
+      const [empRes] = await Promise.all([
+        dataService.getEmployee(emp.id),
+        fetchDepartmentsAndPositions(),
+      ]);
+      const data = empRes.data;
       setEmployeeDetail(data);
       setEditForm({
         first_name: data.first_name || '', last_name: data.last_name || '',
@@ -222,7 +238,7 @@ export default function Employees() {
           <button onClick={() => { fetchAll(); fetchLeaves(); }} className="btn-secondary">
             <RefreshCw size={16} className="mr-1" /> Refresh
           </button>
-          <button onClick={() => setShowAddModal(true)} className="btn-primary">
+          <button onClick={() => { setShowAddModal(true); fetchDepartmentsAndPositions(); }} className="btn-primary">
             <Plus size={18} className="mr-1" /> Add Employee
           </button>
         </div>
@@ -252,9 +268,9 @@ export default function Employees() {
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-400" />
           <input className="input pl-9" placeholder="Search employees..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-        <select className="input w-auto min-w-[140px]" value={departmentFilter} onChange={e => setDepartmentFilter(e.target.value)}>
+        <select className="input w-auto min-w-[160px]" value={departmentFilter} onChange={e => setDepartmentFilter(e.target.value)}>
           <option value="">All Departments</option>
-          {departments.map(d => <option key={d} value={d}>{d}</option>)}
+          {departmentsList.map((d: any) => <option key={d.id} value={d.name}>{d.name}</option>)}
         </select>
         <select className="input w-auto min-w-[140px]" value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
           <option value="">All Roles</option>
@@ -355,9 +371,21 @@ export default function Employees() {
                             {Object.entries(roleLabels).filter(([k]) => k !== 'customer').map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                           </select>
                         </div>
-                        <div><label className="label">Department</label><input className="input" value={editForm.department} onChange={e => setEditForm({...editForm, department: e.target.value})} /></div>
+                        <div><label className="label">Department</label>
+                          <select className="input" value={editForm.department} onChange={e => setEditForm({...editForm, department: e.target.value})}>
+                            <option value="">Select department</option>
+                            {departmentsList.map((d: any) => <option key={d.id} value={d.name}>{d.name}</option>)}
+                          </select>
+                        </div>
                       </div>
-                      <div><label className="label">Position</label><input className="input" value={editForm.position} onChange={e => setEditForm({...editForm, position: e.target.value})} /></div>
+                      <div><label className="label">Position</label>
+                        <select className="input" value={editForm.position} onChange={e => setEditForm({...editForm, position: e.target.value})}>
+                          <option value="">Select position</option>
+                          {positionsList
+                            .filter((p: any) => !editForm.department || p.department_id === departmentsList.find((d: any) => d.name === editForm.department)?.id)
+                            .map((p: any) => <option key={p.id} value={p.name}>{p.name}</option>)}
+                        </select>
+                      </div>
                       <div className="flex items-center gap-2">
                         <input type="checkbox" id="is_active" checked={editForm.is_active} onChange={e => setEditForm({...editForm, is_active: e.target.checked})} className="rounded border-surface-300" />
                         <label htmlFor="is_active" className="text-sm text-surface-700 dark:text-surface-300">Active</label>
@@ -592,12 +620,20 @@ export default function Employees() {
                 </div>
                 <div>
                   <label className="label">Department</label>
-                  <input className="input" value={addForm.department} onChange={e => setAddForm({...addForm, department: e.target.value})} />
+                  <select className="input" value={addForm.department} onChange={e => { setAddForm({...addForm, department: e.target.value, position: '' }); }}>
+                    <option value="">Select department</option>
+                    {departmentsList.map((d: any) => <option key={d.id} value={d.name}>{d.name}</option>)}
+                  </select>
                 </div>
               </div>
               <div>
                 <label className="label">Position</label>
-                <input className="input" value={addForm.position} onChange={e => setAddForm({...addForm, position: e.target.value})} />
+                <select className="input" value={addForm.position} onChange={e => setAddForm({...addForm, position: e.target.value})}>
+                  <option value="">Select position</option>
+                  {positionsList
+                    .filter((p: any) => !addForm.department || p.department_id === departmentsList.find((d: any) => d.name === addForm.department)?.id)
+                    .map((p: any) => <option key={p.id} value={p.name}>{p.name}</option>)}
+                </select>
               </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setShowAddModal(false)} className="btn-secondary">Cancel</button>

@@ -24,6 +24,7 @@ import eventRoutes from './routes/events';
 import reportRoutes from './routes/reports';
 import settingsRoutes from './routes/settings';
 import attendanceRoutes from './routes/attendance';
+import companyStructureRoutes from './routes/company-structure';
 import supabase from './config/supabase';
 
 const app = express();
@@ -79,6 +80,7 @@ app.use(`${apiPrefix}/events`, eventRoutes);
 app.use(`${apiPrefix}/reports`, reportRoutes);
 app.use(`${apiPrefix}/settings`, settingsRoutes);
 app.use(`${apiPrefix}/attendance`, attendanceRoutes);
+app.use(`${apiPrefix}/company`, companyStructureRoutes);
 
 app.get(`${apiPrefix}/health`, (_req, res) => {
   res.json({
