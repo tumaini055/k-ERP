@@ -390,6 +390,10 @@ router.post('/invoices/:id/payments', checkPermission('finance', 'canCreate'), a
 
 router.delete('/invoices/:id', checkPermission('finance', 'canDelete'), async (req: AuthRequest, res: Response) => {
   try {
+    // Delete related records first to avoid FK violations
+    const { error: payErr } = await supabase.from('payments').delete().eq('invoice_id', req.params.id);
+    if (payErr) throw payErr;
+
     const { error } = await supabase.from('invoices').delete().eq('id', req.params.id);
     if (error) throw error;
     res.json({ message: 'Invoice deleted' });
