@@ -54,7 +54,8 @@ router.post('/', checkPermission('employees', 'canCreate'), async (req: AuthRequ
     const empId = employee_id || `EMP-${Date.now().toString().slice(-6)}`;
     const { data, error } = await supabase.from('users').insert({
       first_name, last_name, email, phone, password_hash,
-      role: role || 'engineer', department, position, employee_id: empId, is_active: true,
+      role: role || 'engineer', department, position, employee_id: empId,
+      company_id: req.user!.company_id, is_active: true,
     }).select('*').single();
     if (error) throw error;
     res.status(201).json({ data });

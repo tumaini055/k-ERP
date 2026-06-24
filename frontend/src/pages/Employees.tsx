@@ -11,11 +11,11 @@ import {
 
 const roleLabels: Record<string, string> = {
   super_admin: 'Super Admin',
+  ceo: 'CEO',
   managing_director: 'Managing Director',
   accountant: 'Accountant',
-  project_manager: 'Project Manager',
   engineer: 'Engineer / Technician',
-  sales_officer: 'Sales & Marketing',
+  marketing_officer: 'Marketing Officer',
   customer: 'Customer',
 };
 
@@ -46,9 +46,16 @@ export default function Employees() {
   const [detailTab, setDetailTab] = useState<'overview' | 'contract' | 'attendance' | 'leave'>('overview');
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const generateEmployeeId = () => `EMP-${Date.now().toString().slice(-6)}`;
+  const generatePassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    let pwd = '';
+    for (let i = 0; i < 10; i++) pwd += chars[Math.floor(Math.random() * chars.length)];
+    return pwd;
+  };
   const [addForm, setAddForm] = useState({
-    first_name: '', last_name: '', email: '', phone: '', password: '',
-    role: 'engineer', department: '', position: '',
+    first_name: '', last_name: '', email: '', phone: '', password: generatePassword(),
+    role: 'engineer', department: '', position: '', employee_id: generateEmployeeId(),
   });
 
   const [editing, setEditing] = useState(false);
@@ -145,7 +152,7 @@ export default function Employees() {
     try {
       await dataService.createEmployee(addForm);
       setShowAddModal(false);
-      setAddForm({ first_name: '', last_name: '', email: '', phone: '', password: '', role: 'engineer', department: '', position: '' });
+      setAddForm({ first_name: '', last_name: '', email: '', phone: '', password: generatePassword(), role: 'engineer', department: '', position: '', employee_id: generateEmployeeId() });
       toast.success('Employee added successfully');
       fetchAll();
     } catch (error: any) {
@@ -561,9 +568,20 @@ export default function Employees() {
                   <input className="input" value={addForm.phone} onChange={e => setAddForm({...addForm, phone: e.target.value})} />
                 </div>
               </div>
-              <div>
-                <label className="label">Password *</label>
-                <input type="password" className="input" value={addForm.password} onChange={e => setAddForm({...addForm, password: e.target.value})} required />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Employee ID</label>
+                  <input className="input" value={addForm.employee_id} onChange={e => setAddForm({...addForm, employee_id: e.target.value})} />
+                </div>
+                <div>
+                  <label className="label">Password *</label>
+                  <div className="flex gap-2">
+                    <input type="text" className="input flex-1 font-mono text-xs" value={addForm.password} onChange={e => setAddForm({...addForm, password: e.target.value})} required />
+                    <button type="button" onClick={() => setAddForm({...addForm, password: generatePassword()})} className="btn-secondary text-xs shrink-0 px-2" title="Generate new password">
+                      <RefreshCw size={14} />
+                    </button>
+                  </div>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
