@@ -32,7 +32,7 @@ router.put('/', checkPermission('settings', 'canEdit'), async (req: AuthRequest,
   try {
     const companyId = req.user!.company_id;
     if (!companyId) {
-      res.status(400).json({ error: 'User has no company assigned' });
+      res.json({ data: { settings: {} } });
       return;
     }
 
