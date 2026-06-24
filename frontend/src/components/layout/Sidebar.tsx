@@ -5,12 +5,13 @@ import {
   LayoutDashboard, Users, FolderKanban, Headphones,
   Package, Wifi, DollarSign, ShoppingCart, FileText,
   BarChart3, Settings, UserCircle, Building2, FileSpreadsheet,
-  Calendar, Bell, ClipboardList, Clock, ChevronLeft, ChevronRight,
+  Calendar, Bell, ClipboardList, Clock, ChevronLeft, ChevronRight, User,
 } from 'lucide-react';
 import { useState } from 'react';
 
 const menuItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['super_admin', 'ceo', 'managing_director', 'accountant', 'engineer', 'marketing_officer'] },
+  { path: '/profile', label: 'Profile', icon: User, roles: ['super_admin', 'ceo', 'managing_director', 'accountant', 'engineer', 'marketing_officer', 'customer'] },
   { path: '/crm', label: 'CRM', icon: Users, roles: ['super_admin', 'ceo', 'managing_director', 'marketing_officer'] },
   { path: '/projects', label: 'Projects', icon: FolderKanban, roles: ['super_admin', 'ceo', 'managing_director', 'engineer', 'customer'] },
   { path: '/tickets', label: 'Support', icon: Headphones, roles: ['super_admin', 'ceo', 'managing_director', 'engineer', 'customer'] },

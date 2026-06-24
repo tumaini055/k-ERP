@@ -19,12 +19,27 @@ export interface User {
 
 export type UserRole =
   | 'super_admin'
+  | 'ceo'
   | 'managing_director'
   | 'accountant'
   | 'project_manager'
   | 'engineer'
   | 'sales_officer'
+  | 'marketing_officer'
   | 'customer';
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  title: string;
+  message?: string;
+  type: 'email' | 'sms' | 'whatsapp' | 'in_app';
+  reference_type?: string;
+  reference_id?: string;
+  is_read: boolean;
+  read_at?: string;
+  created_at: string;
+}
 
 export interface Customer {
   id: string;

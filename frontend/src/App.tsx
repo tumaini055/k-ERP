@@ -18,6 +18,7 @@ import Calendar from './pages/Calendar';
 import Attendance from './pages/Attendance';
 import Organization from './pages/Organization';
 import Settings from './pages/Settings';
+import Profile from './pages/Profile';
 
 export default function App() {
   return (
@@ -49,6 +50,7 @@ export default function App() {
             <Route path="calendar" element={<Calendar />} />
             <Route path="reports" element={<Reports />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="profile" element={<Profile />} />
           </Route>
         </Routes>
       </AuthProvider>

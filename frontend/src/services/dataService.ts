@@ -577,4 +577,22 @@ export const dataService = {
     const { data } = await api.get('/company/organization-chart');
     return data;
   },
+
+  // Notifications
+  async getNotifications(params?: any) {
+    const { data } = await api.get('/notifications', { params });
+    return data;
+  },
+  async getUnreadCount() {
+    const { data } = await api.get('/notifications/unread-count');
+    return data;
+  },
+  async markNotificationRead(id: string) {
+    const { data } = await api.put(`/notifications/${id}/read`);
+    return data;
+  },
+  async markAllNotificationsRead() {
+    const { data } = await api.put('/notifications/read-all');
+    return data;
+  },
 };
