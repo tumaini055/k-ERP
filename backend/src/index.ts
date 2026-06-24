@@ -54,22 +54,24 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-app.use('/api/auth', authRoutes);
-app.use('/api/customers', customerRoutes);
-app.use('/api/leads', leadRoutes);
-app.use('/api/projects', projectRoutes);
-app.use('/api/tickets', ticketRoutes);
-app.use('/api/inventory', inventoryRoutes);
-app.use('/api/finance', financeRoutes);
-app.use('/api/employees', employeeRoutes);
-app.use('/api/isp', ispRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/documents', documentRoutes);
-app.use('/api/contracts', contractRoutes);
-app.use('/api/events', eventRoutes);
-app.use('/api/reports', reportRoutes);
+const apiPrefix = process.env.VERCEL ? '' : '/api';
 
-app.get('/api/health', (_req, res) => {
+app.use(`${apiPrefix}/auth`, authRoutes);
+app.use(`${apiPrefix}/customers`, customerRoutes);
+app.use(`${apiPrefix}/leads`, leadRoutes);
+app.use(`${apiPrefix}/projects`, projectRoutes);
+app.use(`${apiPrefix}/tickets`, ticketRoutes);
+app.use(`${apiPrefix}/inventory`, inventoryRoutes);
+app.use(`${apiPrefix}/finance`, financeRoutes);
+app.use(`${apiPrefix}/employees`, employeeRoutes);
+app.use(`${apiPrefix}/isp`, ispRoutes);
+app.use(`${apiPrefix}/dashboard`, dashboardRoutes);
+app.use(`${apiPrefix}/documents`, documentRoutes);
+app.use(`${apiPrefix}/contracts`, contractRoutes);
+app.use(`${apiPrefix}/events`, eventRoutes);
+app.use(`${apiPrefix}/reports`, reportRoutes);
+
+app.get(`${apiPrefix}/health`, (_req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
