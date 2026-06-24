@@ -131,15 +131,22 @@ router.put('/:id', checkPermission('projects', 'canEdit'), async (req: AuthReque
 
 router.delete('/:id', checkPermission('projects', 'canDelete'), async (req: AuthRequest, res: Response) => {
   try {
-    const { error } = await supabase
-      .from('projects')
-      .update({ status: 'cancelled' })
-      .eq('id', req.params.id);
+    // Delete related records first to avoid FK violations
+    const tables = ['time_entries', 'expenses', 'project_tasks', 'project_milestones', 'project_documents'];
+    for (const table of tables) {
+      const { error } = await supabase.from(table).delete().eq('project_id', req.params.id);
+      if (error && error.code !== '42P01') throw error;
+    }
 
+    // Null out project_id on invoices
+    const { error: invErr } = await supabase.from('invoices').update({ project_id: null }).eq('project_id', req.params.id);
+    if (invErr && invErr.code !== '42P01') throw invErr;
+
+    const { error } = await supabase.from('projects').delete().eq('id', req.params.id);
     if (error) throw error;
-    res.json({ message: 'Project cancelled' });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to cancel project' });
+    res.json({ message: 'Project deleted' });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Failed to delete project' });
   }
 });
 
