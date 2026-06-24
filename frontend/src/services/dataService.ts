@@ -507,6 +507,16 @@ export const dataService = {
     });
   },
 
+  // Attendance
+  async getAttendanceByDate(date: string) {
+    const { data } = await api.get('/attendance', { params: { date } });
+    return data;
+  },
+  async saveAttendance(body: { user_id: string; date: string; status: string; check_in?: string; check_out?: string; notes?: string }) {
+    const { data } = await api.put('/attendance', body);
+    return data;
+  },
+
   // Settings
   async getSettings() {
     const { data } = await api.get('/settings');
