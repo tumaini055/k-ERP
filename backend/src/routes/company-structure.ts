@@ -146,4 +146,48 @@ router.delete('/positions/:id', checkPermission('settings', 'canDelete'), async 
   }
 });
 
+// ── Organization Chart ──
+
+router.get('/organization-chart', async (req: AuthRequest, res: Response) => {
+  try {
+    const companyId = req.user!.company_id;
+
+    const [deptRes, empRes] = await Promise.all([
+      supabase.from('departments').select('*').eq('company_id', companyId).order('name'),
+      supabase.from('users').select('id, first_name, last_name, email, phone, role, department, position, avatar_url')
+        .neq('role', 'customer')
+        .eq('company_id', companyId)
+        .order('first_name'),
+    ]);
+
+    const departments = deptRes.data || [];
+    const employees = empRes.data || [];
+
+    const departmentsWithManager = departments.map((dept: any) => {
+      const manager = employees.find((e: any) => e.id === dept.manager_id);
+      const deptEmployees = employees.filter((e: any) => e.department === dept.name);
+      const positionNames = [...new Set(deptEmployees.map((e: any) => e.position).filter(Boolean))];
+
+      const positions = positionNames.map((posName) => ({
+        name: posName,
+        employees: deptEmployees.filter((e: any) => e.position === posName),
+      }));
+
+      return {
+        id: dept.id,
+        name: dept.name,
+        code: dept.code,
+        description: dept.description,
+        manager: manager ? { id: manager.id, first_name: manager.first_name, last_name: manager.last_name, email: manager.email } : null,
+        positions,
+        employee_count: deptEmployees.length,
+      };
+    });
+
+    res.json({ departments: departmentsWithManager });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch organization chart' });
+  }
+});
+
 export default router;

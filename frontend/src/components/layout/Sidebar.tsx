@@ -22,6 +22,7 @@ const menuItems = [
   { path: '/contracts', label: 'Contracts', icon: ClipboardList, roles: ['super_admin', 'ceo', 'managing_director', 'accountant', 'marketing_officer'] },
   { path: '/documents', label: 'Documents', icon: FileText, roles: ['super_admin', 'ceo', 'managing_director', 'engineer', 'marketing_officer', 'customer'] },
   { path: '/calendar', label: 'Calendar', icon: Calendar, roles: ['super_admin', 'ceo', 'managing_director', 'engineer', 'marketing_officer'] },
+  { path: '/organization', label: 'Org Chart', icon: Building2, roles: ['super_admin', 'ceo', 'managing_director', 'accountant', 'engineer', 'marketing_officer'] },
   { path: '/reports', label: 'Reports', icon: BarChart3, roles: ['super_admin', 'ceo', 'managing_director', 'accountant'] },
 ];
 

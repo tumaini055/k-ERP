@@ -16,6 +16,7 @@ import Documents from './pages/Documents';
 import Reports from './pages/Reports';
 import Calendar from './pages/Calendar';
 import Attendance from './pages/Attendance';
+import Organization from './pages/Organization';
 import Settings from './pages/Settings';
 
 export default function App() {
@@ -41,6 +42,7 @@ export default function App() {
             <Route path="inventory" element={<Inventory />} />
             <Route path="employees" element={<Employees />} />
             <Route path="attendance" element={<Attendance />} />
+            <Route path="organization" element={<Organization />} />
             <Route path="isp" element={<ISP />} />
             <Route path="contracts" element={<Contracts />} />
             <Route path="documents" element={<Documents />} />

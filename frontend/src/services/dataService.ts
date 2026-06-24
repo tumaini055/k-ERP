@@ -562,4 +562,10 @@ export const dataService = {
     const { data } = await api.delete(`/company/positions/${id}`);
     return data;
   },
+
+  // Organization Chart
+  async getOrganizationChart() {
+    const { data } = await api.get('/company/organization-chart');
+    return data;
+  },
 };
