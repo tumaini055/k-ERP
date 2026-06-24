@@ -112,15 +112,25 @@ router.put('/:id', checkPermission('crm', 'canEdit'), async (req: AuthRequest, r
 
 router.delete('/:id', checkPermission('crm', 'canDelete'), async (req: AuthRequest, res: Response) => {
   try {
-    const { error } = await supabase
-      .from('customers')
-      .update({ is_active: false })
-      .eq('id', req.params.id);
+    // Null out references on related tables to avoid FK violations
+    const nullifyTables = ['invoices', 'payments', 'isp_subscribers'];
+    for (const table of nullifyTables) {
+      const { error } = await supabase.from(table).update({ customer_id: null }).eq('customer_id', req.params.id);
+      if (error && error.code !== '42P01') throw error;
+    }
 
+    // Delete related records with cascade-or-nullable relationships
+    const deleteTables = ['customer_contacts', 'leads', 'proposals', 'contracts'];
+    for (const table of deleteTables) {
+      const { error } = await supabase.from(table).delete().eq('customer_id', req.params.id);
+      if (error && error.code !== '42P01') throw error;
+    }
+
+    const { error } = await supabase.from('customers').delete().eq('id', req.params.id);
     if (error) throw error;
-    res.json({ message: 'Customer deactivated' });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to delete customer' });
+    res.json({ message: 'Customer deleted' });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Failed to delete customer' });
   }
 });
 

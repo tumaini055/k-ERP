@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import { dataService } from '../services/dataService';
 import { Customer, Lead } from '../types';
 import { formatDate, formatCurrency, getStatusLabel } from '../lib/utils';
@@ -299,7 +300,7 @@ export default function CRM() {
                   <td>
                     <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                       <button onClick={() => editCustomer(customer)} className="rounded p-1.5 text-surface-400 hover:bg-surface-100 hover:text-primary-600"><Edit2 size={14} /></button>
-                      <button onClick={async () => { if (confirm('Deactivate this customer?')) { await dataService.deleteCustomer(customer.id); fetchAll(); } }} className="rounded p-1.5 text-surface-400 hover:bg-surface-100 hover:text-red-600"><Trash2 size={14} /></button>
+                      <button onClick={async () => { if (!confirm('Delete this customer permanently?')) return; try { await dataService.deleteCustomer(customer.id); toast.success('Customer deleted'); fetchAll(); } catch (e: any) { toast.error(e?.response?.data?.error || 'Failed to delete'); } }} className="rounded p-1.5 text-surface-400 hover:bg-surface-100 hover:text-red-600"><Trash2 size={14} /></button>
                     </div>
                   </td>
                 </tr>
