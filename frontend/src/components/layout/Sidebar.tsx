@@ -83,18 +83,20 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
         ))}
       </nav>
 
-      <div className={cn('border-t border-surface-200 p-3 dark:border-surface-700', collapsed && 'flex justify-center')}>
-        <NavLink
-          to="/settings"
-          className={({ isActive }) =>
-            cn('sidebar-link', isActive && 'active', collapsed && 'justify-center px-2')
-          }
-          title={collapsed ? 'Settings' : undefined}
-        >
-          <Settings size={20} />
-          {!collapsed && <span>Settings</span>}
-        </NavLink>
-      </div>
+      {user && ['super_admin', 'managing_director', 'accountant', 'project_manager', 'sales_officer', 'engineer', 'customer'].includes(user.role) && (
+        <div className={cn('border-t border-surface-200 p-3 dark:border-surface-700', collapsed && 'flex justify-center')}>
+          <NavLink
+            to="/settings"
+            className={({ isActive }) =>
+              cn('sidebar-link', isActive && 'active', collapsed && 'justify-center px-2')
+            }
+            title={collapsed ? 'Settings' : undefined}
+          >
+            <Settings size={20} />
+            {!collapsed && <span>Settings</span>}
+          </NavLink>
+        </div>
+      )}
       </aside>
     </>
   );

@@ -34,13 +34,19 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     { module: 'inventory', canView: true, canCreate: false, canEdit: false, canDelete: false },
     { module: 'isp', canView: true, canCreate: false, canEdit: false, canDelete: false },
     { module: 'finance', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'contracts', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'documents', canView: true, canCreate: false, canEdit: false, canDelete: false },
     { module: 'reports', canView: true, canCreate: true, canEdit: false, canDelete: false },
+    { module: 'settings', canView: true, canCreate: false, canEdit: false, canDelete: false },
   ],
   accountant: [
     { module: 'dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },
     { module: 'finance', canView: true, canCreate: true, canEdit: true, canDelete: false },
     { module: 'inventory', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'contracts', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'documents', canView: true, canCreate: false, canEdit: false, canDelete: false },
     { module: 'reports', canView: true, canCreate: true, canEdit: false, canDelete: false },
+    { module: 'settings', canView: true, canCreate: false, canEdit: false, canDelete: false },
   ],
   project_manager: [
     { module: 'dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },
@@ -49,7 +55,10 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     { module: 'events', canView: true, canCreate: true, canEdit: true, canDelete: false },
     { module: 'helpdesk', canView: true, canCreate: false, canEdit: false, canDelete: false },
     { module: 'employees', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'contracts', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'documents', canView: true, canCreate: false, canEdit: false, canDelete: false },
     { module: 'reports', canView: true, canCreate: true, canEdit: false, canDelete: false },
+    { module: 'settings', canView: true, canCreate: false, canEdit: false, canDelete: false },
   ],
   engineer: [
     { module: 'dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },
@@ -57,6 +66,8 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     { module: 'events', canView: true, canCreate: false, canEdit: false, canDelete: false },
     { module: 'helpdesk', canView: true, canCreate: true, canEdit: true, canDelete: false },
     { module: 'inventory', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'documents', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'settings', canView: true, canCreate: false, canEdit: false, canDelete: false },
   ],
   sales_officer: [
     { module: 'dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },
@@ -64,12 +75,15 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     { module: 'events', canView: true, canCreate: true, canEdit: true, canDelete: false },
     { module: 'finance', canView: true, canCreate: true, canEdit: false, canDelete: false },
     { module: 'contracts', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'documents', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'settings', canView: true, canCreate: false, canEdit: false, canDelete: false },
   ],
   customer: [
     { module: 'projects', canView: true, canCreate: false, canEdit: false, canDelete: false },
     { module: 'helpdesk', canView: true, canCreate: true, canEdit: false, canDelete: false },
     { module: 'finance', canView: true, canCreate: false, canEdit: false, canDelete: false },
     { module: 'documents', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'settings', canView: true, canCreate: false, canEdit: false, canDelete: false },
   ],
 };
 
