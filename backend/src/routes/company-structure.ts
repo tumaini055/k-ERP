@@ -86,7 +86,13 @@ router.get('/positions', async (req: AuthRequest, res: Response) => {
     }
 
     const { data, error } = await query;
-    if (error) throw error;
+    if (error) {
+      if ((error as any)?.message?.includes('relation') || (error as any)?.code === '42P01') {
+        res.json({ data: [] });
+        return;
+      }
+      throw error;
+    }
     res.json({ data });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch positions' });
