@@ -388,6 +388,16 @@ router.post('/invoices/:id/payments', checkPermission('finance', 'canCreate'), a
   }
 });
 
+router.delete('/invoices/:id', checkPermission('finance', 'canDelete'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { error } = await supabase.from('invoices').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.json({ message: 'Invoice deleted' });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Failed to delete invoice' });
+  }
+});
+
 router.get('/expenses', checkPermission('finance', 'canView'), async (req: AuthRequest, res: Response) => {
   try {
     const { category, project_id, from_date, to_date, page = 1, limit = 10 } = req.query;

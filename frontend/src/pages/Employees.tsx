@@ -5,7 +5,7 @@ import { User } from '../types';
 import { formatDate, formatDateTime, formatCurrency, getUserInitials, getStatusLabel } from '../lib/utils';
 import {
   UserCircle, Plus, Users, CalendarDays, Award, Search,
-  X, RefreshCw, Edit2, Check,
+  X, RefreshCw, Edit2, Check, Trash2,
   Briefcase, Clock, CheckCircle2, Send,
 } from 'lucide-react';
 
@@ -150,6 +150,16 @@ export default function Employees() {
     setEmployeeDetail(null);
     setEditing(false);
     setShowLeaveForm(false);
+  };
+
+  const handleDeleteEmployee = async (id: string) => {
+    if (!confirm('Delete this employee permanently?')) return;
+    try {
+      await dataService.deleteEmployee(id);
+      toast.success('Employee deleted');
+      closeDetail();
+      fetchAll();
+    } catch (error: any) { toast.error(error?.response?.data?.error || 'Failed to delete'); }
   };
 
   const saveEdit = async () => {
@@ -325,7 +335,10 @@ export default function Employees() {
                   <p className="text-xs text-surface-500">{ed.employee_id || ed.email}</p>
                 </div>
               </div>
-              <button onClick={closeDetail} className="rounded-lg p-2 text-surface-400 hover:bg-surface-100"><X size={20} /></button>
+              <div className="flex items-center gap-1">
+                <button onClick={() => handleDeleteEmployee(ed.id)} className="rounded-lg p-2 text-red-400 hover:bg-red-50 hover:text-red-600"><Trash2 size={16} /></button>
+                <button onClick={closeDetail} className="rounded-lg p-2 text-surface-400 hover:bg-surface-100"><X size={20} /></button>
+              </div>
             </div>
 
             <div className="flex border-b border-surface-200 dark:border-surface-700">

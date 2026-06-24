@@ -208,6 +208,15 @@ export default function Finance() {
     } catch (error) { toast.error('Failed to create expense'); }
   };
 
+  const handleDeleteInv = async (id: string) => {
+    if (!confirm('Delete this invoice permanently?')) return;
+    try {
+      await dataService.deleteInvoice(id);
+      toast.success('Invoice deleted');
+      fetchInvoices();
+    } catch (error: any) { toast.error(error?.response?.data?.error || 'Failed to delete'); }
+  };
+
   const handleDeleteExp = async (id: string) => {
     if (!confirm('Delete this expense?')) return;
     try {
@@ -324,13 +333,14 @@ export default function Finance() {
                   <th>Paid</th>
                   <th>Balance</th>
                   <th>Status</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={9} className="text-center py-12"><RefreshCw size={20} className="mx-auto animate-spin text-surface-400" /></td></tr>
+                  <tr><td colSpan={10} className="text-center py-12"><RefreshCw size={20} className="mx-auto animate-spin text-surface-400" /></td></tr>
                 ) : invoices.length === 0 ? (
-                  <tr><td colSpan={9} className="text-center py-12 text-surface-400">No invoices found</td></tr>
+                  <tr><td colSpan={10} className="text-center py-12 text-surface-400">No invoices found</td></tr>
                 ) : (
                   invoices.map((inv) => (
                     <tr key={inv.id} className="cursor-pointer" onClick={() => openInvDetail(inv)}>
@@ -343,6 +353,11 @@ export default function Finance() {
                       <td>{formatCurrency(inv.paid_amount)}</td>
                       <td className={`font-medium ${calcInvBalance(inv) > 0 ? 'text-red-600' : 'text-accent-600'}`}>{formatCurrency(calcInvBalance(inv))}</td>
                       <td><span className={invStatusColors[inv.status]}>{getStatusLabel(inv.status)}</span></td>
+                      <td>
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteInv(inv.id); }} className="text-red-400 hover:text-red-600 p-1">
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
                     </tr>
                   ))
                 )}

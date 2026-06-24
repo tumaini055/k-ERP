@@ -183,4 +183,14 @@ router.post('/attendance', checkPermission('employees', 'canCreate'), async (req
   }
 });
 
+router.delete('/:id', checkPermission('employees', 'canDelete'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { error } = await supabase.from('users').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.json({ message: 'Employee deleted' });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Failed to delete employee' });
+  }
+});
+
 export default router;

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import { dataService } from '../services/dataService';
 import { Project, ProjectTask, ProjectMilestone } from '../types';
 import { formatDate, formatCurrency, getStatusLabel, cn } from '../lib/utils';
@@ -86,6 +87,16 @@ export default function Projects() {
   };
 
   const closeDetail = () => { setSelectedProject(null); setProjectDetail(null); setDetailTab('overview'); };
+
+  const handleDeleteProject = async (id: string) => {
+    if (!confirm('Delete this project permanently?')) return;
+    try {
+      await dataService.deleteProject(id);
+      toast.success('Project deleted');
+      closeDetail();
+      fetchProjects();
+    } catch (error: any) { toast.error(error?.response?.data?.error || 'Failed to delete'); }
+  };
 
   const openCreateModal = async () => {
     try {
@@ -663,7 +674,10 @@ export default function Projects() {
                 <h2 className="text-lg font-semibold text-surface-900 dark:text-surface-50">{projectDetail.name}</h2>
                 <p className="text-xs text-surface-500">{projectDetail.project_code}</p>
               </div>
-              <button onClick={closeDetail} className="rounded-lg p-2 text-surface-400 hover:bg-surface-100"><X size={20} /></button>
+              <div className="flex items-center gap-1">
+                <button onClick={() => handleDeleteProject(projectDetail.id)} className="rounded-lg p-2 text-red-400 hover:bg-red-50 hover:text-red-600"><Trash2 size={16} /></button>
+                <button onClick={closeDetail} className="rounded-lg p-2 text-surface-400 hover:bg-surface-100"><X size={20} /></button>
+              </div>
             </div>
 
             <div className="flex border-b border-surface-200 dark:border-surface-700">

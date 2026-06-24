@@ -564,6 +564,15 @@ export const dataService = {
   },
 
   // Organization Chart
+  async deleteEmployee(id: string) {
+    const { data } = await api.delete(`/employees/${id}`);
+    return data;
+  },
+  async deleteInvoice(id: string) {
+    const { data } = await api.delete(`/finance/invoices/${id}`);
+    return data;
+  },
+
   async getOrganizationChart() {
     const { data } = await api.get('/company/organization-chart');
     return data;
