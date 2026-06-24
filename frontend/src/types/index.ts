@@ -281,6 +281,7 @@ export interface DashboardStats {
   total_employees: number;
   total_revenue: number;
   monthly_revenue: { month: string; revenue: number }[];
+  project_statuses: Record<string, number>;
   recent_activities: any[];
 }
 

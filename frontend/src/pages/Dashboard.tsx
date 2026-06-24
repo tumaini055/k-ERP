@@ -48,13 +48,17 @@ export default function Dashboard() {
     { label: 'Total Employees', value: stats?.total_employees || 0, icon: UserCircle, color: 'bg-purple-500', change: '+2%' },
   ];
 
-  const pieData = [
-    { name: 'Active', value: stats?.active_projects || 0 },
-    { name: 'Completed', value: stats?.completed_projects || 0 },
-    { name: 'Planning', value: 3 },
-    { name: 'On Hold', value: 1 },
-    { name: 'Cancelled', value: 1 },
-  ];
+  const statusLabels: Record<string, string> = {
+    in_progress: 'Active',
+    completed: 'Completed',
+    planning: 'Planning',
+    on_hold: 'On Hold',
+    cancelled: 'Cancelled',
+  };
+  const pieData = Object.entries(stats?.project_statuses || {}).map(([key, value]) => ({
+    name: statusLabels[key] || key,
+    value,
+  }));
 
   return (
     <div className="page-container">

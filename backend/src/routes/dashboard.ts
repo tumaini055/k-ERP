@@ -33,7 +33,14 @@ async function computeProjectRevenue(): Promise<number> {
 
 router.get('/stats', async (req: AuthRequest, res: Response) => {
   try {
-    const companyFilter = req.user!.role !== 'super_admin' ? { company_id: req.user!.company_id } : {};
+    const companyId = req.user!.company_id;
+    const isSuperAdmin = req.user!.role === 'super_admin';
+    const hasCompany = !!(companyId);
+
+    const applyCompanyFilter = (query: any) => {
+      if (!isSuperAdmin && hasCompany) return query.eq('company_id', companyId);
+      return query;
+    };
 
     const [
       { count: totalCustomers },
@@ -41,15 +48,17 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
       { count: completedProjects },
       { count: openTickets },
       { count: totalEmployees },
+      { data: projectStatuses },
       { data: revenueData },
       { data: recentActivities },
       { data: monthlyRevenue },
     ] = await Promise.all([
-      supabase.from('customers').select('*', { count: 'exact', head: true }).match(companyFilter),
-      supabase.from('projects').select('*', { count: 'exact', head: true }).match({ ...companyFilter, status: 'in_progress' }),
-      supabase.from('projects').select('*', { count: 'exact', head: true }).match({ ...companyFilter, status: 'completed' }),
-      supabase.from('support_tickets').select('*', { count: 'exact', head: true }).match({ ...companyFilter, status: 'open' }),
-      supabase.from('users').select('*', { count: 'exact', head: true }).neq('role', 'customer'),
+      applyCompanyFilter(supabase.from('customers').select('*', { count: 'exact', head: true })),
+      applyCompanyFilter(supabase.from('projects').select('*', { count: 'exact', head: true })).eq('status', 'in_progress'),
+      applyCompanyFilter(supabase.from('projects').select('*', { count: 'exact', head: true })).eq('status', 'completed'),
+      applyCompanyFilter(supabase.from('support_tickets').select('*', { count: 'exact', head: true })).eq('status', 'open'),
+      applyCompanyFilter(supabase.from('users').select('*', { count: 'exact', head: true })).neq('role', 'customer'),
+      applyCompanyFilter(supabase.from('projects').select('status')),
       supabase.from('payments').select('amount').gte('payment_date', new Date(new Date().getFullYear(), 0, 1).toISOString()),
       supabase.from('audit_logs').select('*, user:users(first_name, last_name)').order('created_at', { ascending: false }).limit(10),
       supabase.from('payments').select('amount, payment_date'),
@@ -69,12 +78,18 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
       revenue: monthlyData[i] || 0,
     }));
 
+    const statusCounts: Record<string, number> = {};
+    (projectStatuses || []).forEach((p: any) => {
+      statusCounts[p.status] = (statusCounts[p.status] || 0) + 1;
+    });
+
     res.json({
       total_customers: totalCustomers || 0,
       active_projects: activeProjects || 0,
       completed_projects: completedProjects || 0,
       open_tickets: openTickets || 0,
       total_employees: totalEmployees || 0,
+      project_statuses: statusCounts,
       total_revenue: totalRevenue + projectRevenue,
       project_revenue: projectRevenue,
       monthly_revenue: monthlyRevenueArray,
