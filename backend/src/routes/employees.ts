@@ -116,17 +116,32 @@ router.put('/leave-requests/:id/approve', checkPermission('employees', 'canEdit'
 
 router.get('/:id', checkPermission('employees', 'canView'), async (req: AuthRequest, res: Response) => {
   try {
-    const { data, error } = await supabase
+    const { data: user, error } = await supabase
       .from('users')
-      .select('*, contract:employee_contracts(*), attendance:attendance(*), leave_requests:leave_requests(*), evaluations:performance_evaluations(*)')
+      .select('*')
       .eq('id', req.params.id)
       .single();
 
-    if (error) {
+    if (error || !user) {
       res.status(404).json({ error: 'Employee not found' });
       return;
     }
-    res.json({ data });
+
+    const safeQuery = async (table: string, column = 'user_id') => {
+      try {
+        const { data } = await supabase.from(table).select('*').eq(column, req.params.id);
+        return data || [];
+      } catch { return []; }
+    };
+
+    const [contract, attendance, leave_requests, evaluations] = await Promise.all([
+      supabase.from('employee_contracts').select('*').eq('user_id', req.params.id).maybeSingle().then(r => r.data).catch(() => null),
+      safeQuery('attendance'),
+      safeQuery('leave_requests'),
+      safeQuery('performance_evaluations'),
+    ]);
+
+    res.json({ data: { ...user, contract, attendance, leave_requests, evaluations } });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch employee' });
   }
