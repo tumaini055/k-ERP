@@ -10,19 +10,19 @@ import {
 import { useState } from 'react';
 
 const menuItems = [
-  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['super_admin', 'managing_director', 'accountant', 'project_manager', 'engineer', 'sales_officer'] },
-  { path: '/crm', label: 'CRM', icon: Users, roles: ['super_admin', 'managing_director', 'project_manager', 'sales_officer'] },
-  { path: '/projects', label: 'Projects', icon: FolderKanban, roles: ['super_admin', 'managing_director', 'project_manager', 'engineer', 'customer'] },
-  { path: '/tickets', label: 'Support', icon: Headphones, roles: ['super_admin', 'managing_director', 'project_manager', 'engineer', 'customer'] },
-  { path: '/employees', label: 'Employees', icon: UserCircle, roles: ['super_admin', 'managing_director'] },
-  { path: '/attendance', label: 'Attendance', icon: Clock, roles: ['super_admin', 'managing_director'] },
-  { path: '/inventory', label: 'Inventory', icon: Package, roles: ['super_admin', 'managing_director', 'accountant', 'engineer'] },
-  { path: '/isp', label: 'ISP Management', icon: Wifi, roles: ['super_admin', 'managing_director'] },
-  { path: '/finance', label: 'Finance', icon: DollarSign, roles: ['super_admin', 'managing_director', 'accountant', 'sales_officer', 'customer'] },
-  { path: '/contracts', label: 'Contracts', icon: ClipboardList, roles: ['super_admin', 'managing_director', 'sales_officer'] },
-  { path: '/documents', label: 'Documents', icon: FileText, roles: ['super_admin', 'managing_director', 'customer'] },
-  { path: '/calendar', label: 'Calendar', icon: Calendar, roles: ['super_admin', 'managing_director', 'project_manager', 'engineer', 'sales_officer'] },
-  { path: '/reports', label: 'Reports', icon: BarChart3, roles: ['super_admin', 'managing_director', 'accountant', 'project_manager'] },
+  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['super_admin', 'ceo', 'managing_director', 'accountant', 'engineer', 'marketing_officer'] },
+  { path: '/crm', label: 'CRM', icon: Users, roles: ['super_admin', 'ceo', 'managing_director', 'marketing_officer'] },
+  { path: '/projects', label: 'Projects', icon: FolderKanban, roles: ['super_admin', 'ceo', 'managing_director', 'engineer', 'customer'] },
+  { path: '/tickets', label: 'Support', icon: Headphones, roles: ['super_admin', 'ceo', 'managing_director', 'engineer', 'customer'] },
+  { path: '/employees', label: 'Employees', icon: UserCircle, roles: ['super_admin', 'ceo', 'managing_director'] },
+  { path: '/attendance', label: 'Attendance', icon: Clock, roles: ['super_admin', 'ceo', 'managing_director'] },
+  { path: '/inventory', label: 'Inventory', icon: Package, roles: ['super_admin', 'ceo', 'managing_director', 'accountant', 'engineer'] },
+  { path: '/isp', label: 'ISP Management', icon: Wifi, roles: ['super_admin', 'ceo', 'managing_director'] },
+  { path: '/finance', label: 'Finance', icon: DollarSign, roles: ['super_admin', 'ceo', 'managing_director', 'accountant', 'customer'] },
+  { path: '/contracts', label: 'Contracts', icon: ClipboardList, roles: ['super_admin', 'ceo', 'managing_director', 'accountant', 'marketing_officer'] },
+  { path: '/documents', label: 'Documents', icon: FileText, roles: ['super_admin', 'ceo', 'managing_director', 'engineer', 'marketing_officer', 'customer'] },
+  { path: '/calendar', label: 'Calendar', icon: Calendar, roles: ['super_admin', 'ceo', 'managing_director', 'engineer', 'marketing_officer'] },
+  { path: '/reports', label: 'Reports', icon: BarChart3, roles: ['super_admin', 'ceo', 'managing_director', 'accountant'] },
 ];
 
 interface SidebarProps {
@@ -83,7 +83,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
         ))}
       </nav>
 
-      {user && ['super_admin', 'managing_director', 'accountant', 'project_manager', 'sales_officer', 'engineer', 'customer'].includes(user.role) && (
+      {user && ['super_admin', 'ceo', 'managing_director', 'accountant', 'engineer', 'marketing_officer', 'customer'].includes(user.role) && (
         <div className={cn('border-t border-surface-200 p-3 dark:border-surface-700', collapsed && 'flex justify-center')}>
           <NavLink
             to="/settings"

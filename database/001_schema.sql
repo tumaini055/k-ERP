@@ -11,9 +11,13 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- ENUMS (idempotent creation)
 -- ============================================
 DO $$ BEGIN CREATE TYPE user_role AS ENUM (
-  'super_admin', 'managing_director', 'accountant',
-  'project_manager', 'engineer', 'sales_officer', 'customer'
+  'super_admin', 'ceo', 'managing_director', 'accountant',
+  'project_manager', 'engineer', 'sales_officer', 'marketing_officer', 'customer'
 ); EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- Add new enum values idempotently (for existing databases)
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'ceo';
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'marketing_officer';
 
 DO $$ BEGIN CREATE TYPE ticket_priority AS ENUM ('low', 'medium', 'high', 'urgent'); EXCEPTION WHEN duplicate_object THEN null; END $$;
 DO $$ BEGIN CREATE TYPE ticket_status AS ENUM ('open', 'in_progress', 'resolved', 'closed', 'on_hold'); EXCEPTION WHEN duplicate_object THEN null; END $$;
