@@ -24,9 +24,14 @@ import eventRoutes from './routes/events';
 import reportRoutes from './routes/reports';
 import settingsRoutes from './routes/settings';
 import attendanceRoutes from './routes/attendance';
+import supabase from './config/supabase';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+supabase.storage.getBucket('documents').catch(() => {
+  supabase.storage.createBucket('documents', { public: true, fileSizeLimit: 52428800 });
+});
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,

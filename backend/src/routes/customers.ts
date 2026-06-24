@@ -14,7 +14,7 @@ router.get('/', checkPermission('crm', 'canView'), async (req: AuthRequest, res:
       .from('customers')
       .select('*, user:users(first_name, last_name, email)', { count: 'exact' });
 
-    if (req.user!.role !== 'super_admin') {
+    if (req.user!.role !== 'super_admin' && req.user!.company_id) {
       query = query.eq('company_id', req.user!.company_id);
     }
 

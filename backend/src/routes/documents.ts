@@ -2,20 +2,8 @@ import { Router, Response } from 'express';
 import { supabase } from '../config/supabase';
 import { authenticate, checkPermission, AuthRequest } from '../middleware/auth';
 import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
 
-const uploadDir = path.join(__dirname, '../../uploads/documents');
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadDir),
-  filename: (_req, file, cb) => {
-    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    cb(null, `${unique}${path.extname(file.originalname)}`);
-  },
-});
-const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 const router = Router();
 
@@ -48,14 +36,36 @@ router.get('/', checkPermission('documents', 'canView'), async (req: AuthRequest
 });
 
 // Upload document (with file)
+const uploadToStorage = async (file: Express.Multer.File, userId: string): Promise<string> => {
+  const ext = file.originalname.split('.').pop() || 'bin';
+  const fileName = `${userId}/${Date.now()}-${Math.round(Math.random() * 1e9)}.${ext}`;
+
+  const { data, error } = await supabase.storage
+    .from('documents')
+    .upload(fileName, file.buffer, {
+      contentType: file.mimetype,
+      cacheControl: '3600',
+      upsert: false,
+    });
+
+  if (error) throw new Error(`Storage upload failed: ${error.message}`);
+
+  const { data: urlData } = supabase.storage
+    .from('documents')
+    .getPublicUrl(data.path);
+
+  return urlData.publicUrl;
+};
+
 router.post('/', checkPermission('documents', 'canCreate'), upload.single('file'), async (req: AuthRequest, res: Response) => {
   try {
     const file = req.file;
     const body = JSON.parse(JSON.stringify(req.body));
 
-    const fileUrl = file
-      ? `/uploads/documents/${file.filename}`
-      : body.file_url;
+    let fileUrl = body.file_url;
+    if (file) {
+      fileUrl = await uploadToStorage(file, req.user!.id);
+    }
 
     const { data, error } = await supabase
       .from('documents')
@@ -160,10 +170,14 @@ router.put('/:id', checkPermission('documents', 'canEdit'), async (req: AuthRequ
 router.delete('/:id', checkPermission('documents', 'canDelete'), async (req: AuthRequest, res: Response) => {
   try {
     const { data: doc } = await supabase.from('documents').select('file_url').eq('id', req.params.id).single();
-    if (doc?.file_url?.startsWith('/uploads/')) {
-      const filePath = path.join(__dirname, '../..', doc.file_url);
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+
+    if (doc?.file_url?.includes('supabase.co')) {
+      const pathMatch = doc.file_url.match(/\/storage\/v1\/object\/public\/documents\/(.+)/);
+      if (pathMatch) {
+        await supabase.storage.from('documents').remove([pathMatch[1]]);
+      }
     }
+
     const { error } = await supabase.from('documents').delete().eq('id', req.params.id);
     if (error) throw error;
     res.json({ message: 'Document deleted' });
@@ -180,7 +194,7 @@ router.post('/:id/versions', checkPermission('documents', 'canCreate'), upload.s
 
     const { data: doc } = await supabase.from('documents').select('version').eq('id', req.params.id).single();
     const newVersion = (doc?.version || 0) + 1;
-    const fileUrl = `/uploads/documents/${file.filename}`;
+    const fileUrl = await uploadToStorage(file, req.user!.id);
 
     const { data: version, error: verErr } = await supabase
       .from('document_versions')
