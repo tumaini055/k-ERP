@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Outlet, Navigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import Sidebar from './Sidebar';
@@ -5,6 +6,7 @@ import Header from './Header';
 
 export default function AppLayout() {
   const { user, isLoading } = useAuth();
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -23,9 +25,9 @@ export default function AppLayout() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-surface-50 dark:bg-surface-900">
-      <Sidebar />
+      <Sidebar mobileOpen={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} />
       <div className="flex flex-1 flex-col overflow-hidden lg:pl-64">
-        <Header />
+        <Header onToggleSidebar={() => setMobileSidebarOpen(!mobileSidebarOpen)} />
         <main className="flex-1 overflow-y-auto">
           <Outlet />
         </main>

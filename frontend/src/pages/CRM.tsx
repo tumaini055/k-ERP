@@ -314,7 +314,7 @@ export default function CRM() {
   const renderLeads = () => (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {['all', 'new', 'contacted', 'qualified', 'proposal', 'negotiation', 'won', 'lost'].map((s) => (
             <button key={s} className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
               s === 'all' ? 'bg-primary-600 text-white' : 'bg-surface-100 text-surface-600 hover:bg-surface-200 dark:bg-surface-700 dark:text-surface-400'

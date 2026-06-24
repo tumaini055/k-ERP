@@ -169,7 +169,7 @@ export default function Documents() {
           <option value="all">All Types</option>
           {FILE_TYPES.map(t => <option key={t} value={t}>{t.toUpperCase()}</option>)}
         </select>
-        <select className="input w-44" value={folderFilter} onChange={e => setFolderFilter(e.target.value)}>
+        <select className="input w-full sm:w-44" value={folderFilter} onChange={e => setFolderFilter(e.target.value)}>
           <option value="all">All Folders</option>
           {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
         </select>

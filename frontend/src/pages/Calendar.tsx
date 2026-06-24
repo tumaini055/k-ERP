@@ -155,7 +155,7 @@ export default function Calendar() {
         </div>
       </div>
 
-      <div className="flex gap-6">
+      <div className="flex flex-col gap-6 lg:flex-row">
         {/* Calendar Grid */}
         <div className="flex-1 min-w-0">
           <div className="rounded-xl border border-surface-200 bg-white dark:border-surface-700 dark:bg-surface-800 overflow-hidden">

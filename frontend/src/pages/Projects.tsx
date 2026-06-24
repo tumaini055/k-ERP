@@ -635,9 +635,9 @@ export default function Projects() {
         <div className="flex items-center gap-3">
           <div className="relative">
             <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-400" />
-            <input type="text" placeholder="Search projects..." className="input pl-10 w-64" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <input type="text" placeholder="Search projects..." className="input pl-10 w-full sm:w-64" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
-          <select className="input w-36" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+          <select className="input w-full sm:w-36" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="">All Status</option>
             <option value="planning">Planning</option>
             <option value="in_progress">In Progress</option>

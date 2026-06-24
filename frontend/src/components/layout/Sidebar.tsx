@@ -25,7 +25,12 @@ const menuItems = [
   { path: '/reports', label: 'Reports', icon: BarChart3, roles: ['super_admin', 'managing_director', 'accountant', 'project_manager'] },
 ];
 
-export default function Sidebar() {
+interface SidebarProps {
+  mobileOpen: boolean;
+  onClose: () => void;
+}
+
+export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   const { user } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
 
@@ -34,12 +39,18 @@ export default function Sidebar() {
   );
 
   return (
-    <aside
-      className={cn(
-        'fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-surface-200 bg-white transition-all duration-300 dark:border-surface-700 dark:bg-surface-800',
-        collapsed ? 'w-16' : 'w-64'
+    <>
+      {mobileOpen && (
+        <div className="fixed inset-0 z-30 bg-black/50 lg:hidden" onClick={onClose} />
       )}
-    >
+      <aside
+        className={cn(
+          'fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-surface-200 bg-white transition-all duration-300 dark:border-surface-700 dark:bg-surface-800',
+          collapsed ? 'w-16' : 'w-64',
+          'max-lg:transition-transform max-lg:duration-300',
+          mobileOpen ? 'max-lg:translate-x-0' : 'max-lg:-translate-x-full'
+        )}
+      >
       <div className={cn('flex h-16 items-center border-b border-surface-200 px-4 dark:border-surface-700', collapsed ? 'justify-center' : 'justify-between')}>
         {!collapsed && (
           <div className="flex items-center gap-3">
@@ -84,6 +95,7 @@ export default function Sidebar() {
           {!collapsed && <span>Settings</span>}
         </NavLink>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }

@@ -3,10 +3,14 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { cn, getUserInitials } from '../../lib/utils';
 import {
-  Bell, Moon, Sun, LogOut, User, Settings, ChevronDown,
+  Bell, Moon, Sun, LogOut, User, Settings, ChevronDown, Menu,
 } from 'lucide-react';
 
-export default function Header() {
+interface HeaderProps {
+  onToggleSidebar: () => void;
+}
+
+export default function Header({ onToggleSidebar }: HeaderProps) {
   const { user, logout, updateUser } = useAuth();
   const [darkMode, setDarkMode] = useState(() => document.documentElement.classList.contains('dark'));
   const [showProfile, setShowProfile] = useState(false);
@@ -35,6 +39,9 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-surface-200 bg-white/80 px-6 backdrop-blur-sm dark:border-surface-700 dark:bg-surface-800/80">
       <div className="flex items-center gap-4">
+        <button onClick={onToggleSidebar} className="rounded-lg p-2 text-surface-500 hover:bg-surface-100 hover:text-surface-700 lg:hidden dark:hover:bg-surface-700 dark:hover:text-surface-300">
+          <Menu size={22} />
+        </button>
         <h1 className="text-lg font-semibold text-surface-900 dark:text-surface-50">
           Welcome back, {user.first_name}
         </h1>

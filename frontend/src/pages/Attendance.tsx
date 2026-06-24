@@ -147,7 +147,7 @@ export default function Attendance() {
       </div>
 
       {!loading && (
-        <div className="mb-6 grid grid-cols-5 gap-3">
+        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
           {statusOptions.map((opt) => {
             const Icon = opt.icon;
             return (
