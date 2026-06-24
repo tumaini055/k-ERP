@@ -151,7 +151,8 @@ router.delete('/positions/:id', checkPermission('settings', 'canDelete'), async 
 router.get('/organization-chart', async (req: AuthRequest, res: Response) => {
   try {
     const companyId = req.user!.company_id;
-    let deptQuery = supabase.from('departments').select('*').order('name');
+    const deptOrder: Record<string, number> = { Management: 1, Hardware: 2, Software: 3, Marketing: 4 };
+    let deptQuery = supabase.from('departments').select('*');
     let empQuery = supabase.from('users').select('id, first_name, last_name, email, phone, role, department, position, avatar_url')
       .neq('role', 'customer')
       .order('first_name');
@@ -163,7 +164,9 @@ router.get('/organization-chart', async (req: AuthRequest, res: Response) => {
 
     const [deptRes, empRes] = await Promise.all([deptQuery, empQuery]);
 
-    const departments = deptRes.data || [];
+    const departments = (deptRes.data || []).sort(
+      (a: any, b: any) => (deptOrder[a.name] || 99) - (deptOrder[b.name] || 99)
+    );
     const employees = empRes.data || [];
 
     const departmentsWithManager = departments.map((dept: any) => {
