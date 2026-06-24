@@ -255,7 +255,7 @@ export default function Employees() {
         </div>
         <div className="stat-card">
           <div className="stat-icon shrink-0 bg-purple-100 text-purple-600"><Award size={22} /></div>
-          <div className="min-w-0 overflow-hidden"><p className="stat-value">{departments.length}</p><p className="stat-label">Departments</p></div>
+          <div className="min-w-0 overflow-hidden"><p className="stat-value">{departmentsList.length}</p><p className="stat-label">Departments</p></div>
         </div>
         <div className="stat-card">
           <div className="stat-icon shrink-0 bg-accent-100 text-accent-600"><CheckCircle2 size={22} /></div>
