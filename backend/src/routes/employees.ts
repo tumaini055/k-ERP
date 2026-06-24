@@ -59,8 +59,58 @@ router.post('/', checkPermission('employees', 'canCreate'), async (req: AuthRequ
     }).select('*').single();
     if (error) throw error;
     res.status(201).json({ data });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || error?.details || 'Failed to create employee' });
+  }
+});
+
+router.get('/leave-requests', checkPermission('employees', 'canView'), async (req: AuthRequest, res: Response) => {
+  try {
+    let query = supabase
+      .from('leave_requests')
+      .select('*, user:users(first_name, last_name, department), approver:users(first_name, last_name)');
+
+    if (['engineer'].includes(req.user!.role)) {
+      query = query.eq('user_id', req.user!.id);
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false });
+
+    if (error) throw error;
+    res.json({ data });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to create employee' });
+    res.status(500).json({ error: 'Failed to fetch leave requests' });
+  }
+});
+
+router.post('/leave-requests', checkPermission('employees', 'canCreate'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { data, error } = await supabase
+      .from('leave_requests')
+      .insert({ ...req.body, user_id: req.user!.id })
+      .select('*')
+      .single();
+
+    if (error) throw error;
+    res.status(201).json({ data });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create leave request' });
+  }
+});
+
+router.put('/leave-requests/:id/approve', checkPermission('employees', 'canEdit'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { data, error } = await supabase
+      .from('leave_requests')
+      .update({ status: 'approved', approved_by: req.user!.id })
+      .eq('id', req.params.id)
+      .select('*')
+      .single();
+
+    if (error) throw error;
+    res.json({ data });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to approve leave' });
   }
 });
 
@@ -130,56 +180,6 @@ router.post('/attendance', checkPermission('employees', 'canCreate'), async (req
     res.status(201).json({ data });
   } catch (error) {
     res.status(500).json({ error: 'Failed to record attendance' });
-  }
-});
-
-router.get('/leave-requests', checkPermission('employees', 'canView'), async (req: AuthRequest, res: Response) => {
-  try {
-    let query = supabase
-      .from('leave_requests')
-      .select('*, user:users(first_name, last_name, department), approver:users(first_name, last_name)');
-
-    if (['engineer'].includes(req.user!.role)) {
-      query = query.eq('user_id', req.user!.id);
-    }
-
-    const { data, error } = await query.order('created_at', { ascending: false });
-
-    if (error) throw error;
-    res.json({ data });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch leave requests' });
-  }
-});
-
-router.post('/leave-requests', checkPermission('employees', 'canCreate'), async (req: AuthRequest, res: Response) => {
-  try {
-    const { data, error } = await supabase
-      .from('leave_requests')
-      .insert({ ...req.body, user_id: req.user!.id })
-      .select('*')
-      .single();
-
-    if (error) throw error;
-    res.status(201).json({ data });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to create leave request' });
-  }
-});
-
-router.put('/leave-requests/:id/approve', checkPermission('employees', 'canEdit'), async (req: AuthRequest, res: Response) => {
-  try {
-    const { data, error } = await supabase
-      .from('leave_requests')
-      .update({ status: 'approved', approved_by: req.user!.id })
-      .eq('id', req.params.id)
-      .select('*')
-      .single();
-
-    if (error) throw error;
-    res.json({ data });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to approve leave' });
   }
 });
 
