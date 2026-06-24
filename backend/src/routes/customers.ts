@@ -116,14 +116,14 @@ router.delete('/:id', checkPermission('crm', 'canDelete'), async (req: AuthReque
     const nullifyTables = ['invoices', 'payments', 'isp_subscribers'];
     for (const table of nullifyTables) {
       const { error } = await supabase.from(table).update({ customer_id: null }).eq('customer_id', req.params.id);
-      if (error && error.code !== '42P01') throw error;
+      if (error && error.code !== '42P01' && error.code !== 'PGRST205') throw error;
     }
 
     // Delete related records with cascade-or-nullable relationships
     const deleteTables = ['customer_contacts', 'leads', 'proposals', 'contracts'];
     for (const table of deleteTables) {
       const { error } = await supabase.from(table).delete().eq('customer_id', req.params.id);
-      if (error && error.code !== '42P01') throw error;
+      if (error && error.code !== '42P01' && error.code !== 'PGRST205') throw error;
     }
 
     const { error } = await supabase.from('customers').delete().eq('id', req.params.id);
