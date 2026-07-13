@@ -326,6 +326,7 @@ export interface Lead {
 export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'proposal' | 'negotiation' | 'won' | 'lost';
 
 export interface CompanySettings {
+  logo_url?: string;
   company_name?: string;
   company_email?: string;
   company_phone?: string;
@@ -339,6 +340,9 @@ export interface CompanySettings {
   invoice_prefix?: string;
   invoice_terms?: string;
   default_tax_rate?: number;
+  bank_name?: string;
+  bank_account_name?: string;
+  bank_account_number?: string;
 }
 
 export interface CalendarEvent {

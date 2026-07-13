@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { dataService } from '../services/dataService';
 import { CompanySettings } from '../types';
-import { Save, Building2, Receipt, Globe, RefreshCw, Plus, Pencil, Trash2, X, Check } from 'lucide-react';
+import { Save, Building2, Receipt, Globe, RefreshCw, Plus, Pencil, Trash2, X, Check, Upload, Landmark } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 type Tab = 'company' | 'departments' | 'positions';
@@ -61,11 +61,16 @@ export default function Settings() {
     setSaving(true);
     setSaved(false);
     try {
-      await dataService.updateSettings(settings);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
-    } catch (error) {
-      console.error(error);
+      const res = await dataService.updateSettings(settings);
+      if (!res?.data?.settings) {
+        toast.error('Save failed — your account may have no company assigned');
+      } else {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 3000);
+        toast.success('Settings saved');
+      }
+    } catch (error: any) {
+      toast.error(error?.response?.data?.error || 'Failed to save settings');
     } finally {
       setSaving(false);
     }
@@ -188,6 +193,55 @@ export default function Settings() {
               <h2 className="text-base font-semibold text-surface-900 dark:text-surface-50">Company Information</h2>
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label className="label">Company Logo</label>
+                <div className="flex items-center gap-4">
+                  {settings.logo_url && (
+                    <img src={settings.logo_url} alt="Logo" className="h-20 w-20 rounded-lg border border-surface-200 object-contain dark:border-surface-700" />
+                  )}
+                  <div className="flex-1">
+                    <label className="btn-secondary cursor-pointer inline-flex items-center gap-2 px-4 py-2 text-sm">
+                      <Upload size={16} /> Upload Logo
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const formData = new FormData();
+                          formData.append('logo', file);
+                          try {
+                            const token = localStorage.getItem('token');
+                            const res = await fetch('/api/settings/upload-logo', {
+                              method: 'POST',
+                              headers: token ? { Authorization: `Bearer ${token}` } : {},
+                              body: formData,
+                            });
+                            const json = await res.json();
+                            if (json.url) {
+                              update('logo_url', json.url);
+                              toast.success('Logo uploaded');
+                            } else {
+                              toast.error('Upload failed');
+                            }
+                          } catch {
+                            toast.error('Upload failed');
+                          }
+                        }}
+                      />
+                    </label>
+                    {settings.logo_url && (
+                      <button
+                        onClick={() => update('logo_url', '')}
+                        className="ml-2 text-xs text-red-600 hover:text-red-700"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
               <div>
                 <label className="label">Company Name</label>
                 <input className="input" value={settings.company_name || ''} onChange={(e) => update('company_name', e.target.value)} />
@@ -232,6 +286,27 @@ export default function Settings() {
               <div className="sm:col-span-2">
                 <label className="label">Default Invoice Terms</label>
                 <textarea className="input" rows={2} value={settings.invoice_terms || ''} onChange={(e) => update('invoice_terms', e.target.value)} placeholder="e.g. Payment due within 30 days" />
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="mb-5 flex items-center gap-2">
+              <Landmark size={20} className="text-primary-600" />
+              <h2 className="text-base font-semibold text-surface-900 dark:text-surface-50">Bank Details</h2>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="label">Bank Name</label>
+                <input className="input" value={settings.bank_name || ''} onChange={(e) => update('bank_name', e.target.value)} placeholder="e.g. NMB Bank" />
+              </div>
+              <div>
+                <label className="label">Account Name</label>
+                <input className="input" value={settings.bank_account_name || ''} onChange={(e) => update('bank_account_name', e.target.value)} placeholder="e.g. K-Connect Technologies Ltd" />
+              </div>
+              <div>
+                <label className="label">Account Number</label>
+                <input className="input" value={settings.bank_account_number || ''} onChange={(e) => update('bank_account_number', e.target.value)} placeholder="e.g. 1234567890" />
               </div>
             </div>
           </div>

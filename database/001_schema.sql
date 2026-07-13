@@ -868,9 +868,9 @@ INSERT INTO companies (id, name, legal_name, tax_id, phone, email, website, addr
 SELECT uuid_generate_v4(), 'K-CONNECT TECHNOLOGIES', 'K-CONNECT TECHNOLOGIES LIMITED', 'TIN-123456789', '+255 712 345 678', 'info@kconnect.co.tz', 'https://kconnect.co.tz', 'Plot No. 123, Mwai Kibaki Road', 'Dar es Salaam', 'Dar es Salaam', 'Tanzania', 'TZS'
 WHERE NOT EXISTS (SELECT 1 FROM companies WHERE name = 'K-CONNECT TECHNOLOGIES');
 
--- Default admin user (password: admin123)
-INSERT INTO users (employee_id, first_name, last_name, email, phone, password_hash, role, department, position, language)
-SELECT 'ADM-001', 'Super', 'Admin', 'admin@kconnect.co.tz', '+255 712 000 000', crypt('admin123', gen_salt('bf')), 'super_admin', 'Management', 'System Administrator', 'en'
+-- Default admin user (password: admin123) — linked to the company above
+INSERT INTO users (employee_id, first_name, last_name, email, phone, password_hash, role, company_id, department, position, language)
+SELECT 'ADM-001', 'Super', 'Admin', 'admin@kconnect.co.tz', '+255 712 000 000', crypt('admin123', gen_salt('bf')), 'super_admin', (SELECT id FROM companies WHERE name = 'K-CONNECT TECHNOLOGIES'), 'Management', 'System Administrator', 'en'
 WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'admin@kconnect.co.tz');
 
 
