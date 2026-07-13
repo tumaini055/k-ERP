@@ -55,12 +55,15 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
       >
       <div className={cn('flex h-16 items-center border-b border-surface-200 px-4 dark:border-surface-700', collapsed ? 'justify-center' : 'justify-between')}>
         {!collapsed && (
-          <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="K-CONNECT" className="h-8 w-auto object-contain" />
-            <span className="text-sm font-bold text-surface-900 dark:text-surface-50">K-CONNECT</span>
+          <div className="flex items-center gap-3 min-w-0">
+            <img src="/logo.png" alt="K-CONNECT" className="h-9 w-auto shrink-0" />
+            <span className="text-sm font-bold tracking-tight text-surface-900 dark:text-surface-50 truncate">K-CONNECT</span>
           </div>
         )}
-        <button onClick={() => setCollapsed(!collapsed)} className="rounded-lg p-1.5 text-surface-400 hover:bg-surface-100 hover:text-surface-600 dark:hover:bg-surface-700">
+        {collapsed && (
+          <img src="/logo.png" alt="K-CONNECT" className="h-7 w-auto" />
+        )}
+        <button onClick={() => setCollapsed(!collapsed)} className="rounded-lg p-1.5 text-surface-400 hover:bg-surface-100 hover:text-surface-600 dark:hover:bg-surface-700 shrink-0">
           {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
         </button>
       </div>
