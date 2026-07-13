@@ -32,8 +32,8 @@ export default function Login() {
       <div className="flex w-full items-center justify-center px-4">
         <div className="w-full max-w-md">
           <div className="mb-8 text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 backdrop-blur-sm">
-              <span className="text-2xl font-bold text-white">K</span>
+            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-2xl bg-white/10 backdrop-blur-sm p-2">
+              <img src="/logo.png" alt="K-CONNECT" className="h-full w-full object-contain" />
             </div>
             <h1 className="text-2xl font-bold text-white">K-CONNECT TECHNOLOGIES</h1>
             <p className="mt-1 text-primary-200">Enterprise Management System</p>

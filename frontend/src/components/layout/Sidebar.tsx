@@ -56,7 +56,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
       <div className={cn('flex h-16 items-center border-b border-surface-200 px-4 dark:border-surface-700', collapsed ? 'justify-center' : 'justify-between')}>
         {!collapsed && (
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-600 text-sm font-bold text-white">K</div>
+            <img src="/logo.png" alt="K-CONNECT" className="h-8 w-auto object-contain" />
             <span className="text-sm font-bold text-surface-900 dark:text-surface-50">K-CONNECT</span>
           </div>
         )}
