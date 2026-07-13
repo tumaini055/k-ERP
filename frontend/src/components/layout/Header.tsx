@@ -82,10 +82,10 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-surface-200 bg-white/80 px-6 backdrop-blur-sm dark:border-surface-700 dark:bg-surface-800/80">
       <div className="flex items-center gap-4">
-        <button onClick={onToggleSidebar} className="rounded-lg p-2 text-surface-500 hover:bg-surface-100 hover:text-surface-700 lg:hidden dark:hover:bg-surface-700 dark:hover:text-surface-300">
+        <button onClick={onToggleSidebar} className="rounded-lg p-2 text-surface-500 hover:bg-surface-100 hover:text-surface-700 lg:hidden dark:hover:bg-surface-700 dark:hover:text-surface-300 shrink-0">
           <Menu size={22} />
         </button>
-        <h1 className="text-lg font-semibold text-surface-900 dark:text-surface-50">
+        <h1 className="text-sm sm:text-lg font-semibold text-surface-900 dark:text-surface-50 truncate min-w-0 max-w-[calc(100vw-16rem)]">
           Welcome back, {user.first_name}
         </h1>
       </div>

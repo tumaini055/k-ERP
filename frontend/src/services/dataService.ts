@@ -378,6 +378,18 @@ export const dataService = {
     return data;
   },
 
+  // Project Invoices (income from invoices linked to project)
+  async getProjectInvoices(projectId: string) {
+    const { data } = await api.get(`/projects/${projectId}/invoices`);
+    return data;
+  },
+
+  // All project income summary (for Finance Revenue tab)
+  async getProjectIncomeSummary() {
+    const { data } = await api.get('/projects/income/summary');
+    return data;
+  },
+
   // Download Project Financial Report
   async downloadProjectReport(projectId: string) {
     const response = await api.get(`/projects/${projectId}/report`, { responseType: 'blob' as any });

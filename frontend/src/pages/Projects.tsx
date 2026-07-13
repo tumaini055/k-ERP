@@ -8,6 +8,7 @@ import {
   X, Edit2, Trash2, ChevronRight, RefreshCw, List, Columns,
   Calendar, User, Target, DollarSign, FileText, BarChart3,
   Circle, CheckCircle2, Timer, PlusCircle, Users,
+  Receipt, CreditCard,
 } from 'lucide-react';
 
 const statusStyles: Record<string, string> = {
@@ -35,7 +36,9 @@ export default function Projects() {
 
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [projectDetail, setProjectDetail] = useState<any>(null);
-  const [detailTab, setDetailTab] = useState<'overview' | 'tasks' | 'milestones' | 'time' | 'expenses'>('overview');
+  const [detailTab, setDetailTab] = useState<'overview' | 'tasks' | 'milestones' | 'time' | 'expenses' | 'invoices'>('overview');
+  const [projectInvoices, setProjectInvoices] = useState<any[]>([]);
+  const [projectInvoiceSummary, setProjectInvoiceSummary] = useState<any>(null);
 
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -73,20 +76,23 @@ export default function Projects() {
   const openProjectDetail = async (project: Project) => {
     setSelectedProject(project);
     try {
-      const [{ data: detail }, { data: tasks }, { data: milestones }, { data: timeEntries }, { data: expenses }, financials] = await Promise.all([
+      const [{ data: detail }, { data: tasks }, { data: milestones }, { data: timeEntries }, { data: expenses }, financials, invData] = await Promise.all([
         dataService.getProject(project.id),
         dataService.getProjectTasks(project.id),
         dataService.getMilestones(project.id),
         dataService.getTimeEntries(project.id),
         dataService.getProjectExpenses(project.id),
         dataService.getProjectFinancials(project.id),
+        dataService.getProjectInvoices(project.id),
       ]);
       setProjectDetail({ ...detail, tasks: tasks || [], milestones: milestones || [], time_entries: timeEntries || [], expenses: expenses || [] });
       setProjectFinancials(financials);
+      setProjectInvoices(invData?.data || []);
+      setProjectInvoiceSummary(invData?.summary || null);
     } catch (error) { console.error(error); }
   };
 
-  const closeDetail = () => { setSelectedProject(null); setProjectDetail(null); setDetailTab('overview'); };
+  const closeDetail = () => { setSelectedProject(null); setProjectDetail(null); setDetailTab('overview'); setProjectInvoices([]); setProjectInvoiceSummary(null); };
 
   const handleDeleteProject = async (id: string) => {
     if (!confirm('Delete this project permanently?')) return;
@@ -94,7 +100,7 @@ export default function Projects() {
       await dataService.deleteProject(id);
       toast.success('Project deleted');
       closeDetail();
-      fetchProjects();
+      fetchAll();
     } catch (error: any) { toast.error(error?.response?.data?.error || 'Failed to delete'); }
   };
 
@@ -290,7 +296,8 @@ export default function Projects() {
   const updateProjectStatus = async (id: string, status: string) => {
     try {
       await dataService.updateProject(id, { status });
-      openProjectDetail(selectedProject!);
+      await openProjectDetail(selectedProject!);
+      fetchAll();
     } catch (error) { console.error(error); }
   };
 
@@ -303,15 +310,19 @@ export default function Projects() {
         <div className="flex items-center gap-4">
           <div className="flex-1">
             <div className="flex items-center gap-2">
-              <select
-                value={p.status}
-                onChange={(e) => updateProjectStatus(p.id, e.target.value)}
-                className={`rounded border-0 px-2 py-0.5 text-xs font-medium cursor-pointer ${statusStyles[p.status]}`}>
-                <option value="planning">Planning</option>
-                <option value="in_progress">In Progress</option>
-                <option value="on_hold">On Hold</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
+              {p.status === 'completed' ? (
+                <span className={`${statusStyles[p.status]} cursor-default`}>Completed</span>
+              ) : (
+                <select
+                  value={p.status}
+                  onChange={(e) => updateProjectStatus(p.id, e.target.value)}
+                  className={`rounded border-0 px-2 py-0.5 text-xs font-medium cursor-pointer ${statusStyles[p.status]}`}>
+                  <option value="planning">Planning</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="on_hold">On Hold</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              )}
               <span className={cn('text-xs font-medium', priorityColors[p.priority || 'medium'])}>{p.priority}</span>
               {p.status === 'completed' && <span className="badge-success">Completed</span>}
               {p.recorded_revenue > 0 && <span className="badge-success">Revenue: {formatCurrency(p.recorded_revenue)}</span>}
@@ -595,6 +606,77 @@ export default function Projects() {
     );
   };
 
+  const renderDetailInvoices = () => {
+    if (!projectInvoiceSummary) return null;
+    return (
+      <div className="space-y-4">
+        {/* Summary cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20">
+            <p className="text-xs text-surface-500">Total Invoiced</p>
+            <p className="truncate text-sm font-bold text-blue-700 dark:text-blue-400">{formatCurrency(projectInvoiceSummary.total_invoiced)}</p>
+          </div>
+          <div className="rounded-lg bg-accent-50 p-3 dark:bg-accent-900/20">
+            <p className="text-xs text-surface-500">Total Paid</p>
+            <p className="truncate text-sm font-bold text-accent-700 dark:text-accent-400">{formatCurrency(projectInvoiceSummary.total_paid)}</p>
+          </div>
+          <div className={`rounded-lg p-3 ${projectInvoiceSummary.total_balance > 0 ? 'bg-red-50 dark:bg-red-900/20' : 'bg-surface-50 dark:bg-surface-700'}`}>
+            <p className="text-xs text-surface-500">Outstanding</p>
+            <p className={`truncate text-sm font-bold ${projectInvoiceSummary.total_balance > 0 ? 'text-red-700 dark:text-red-400' : 'text-surface-500'}`}>
+              {formatCurrency(projectInvoiceSummary.total_balance)}
+            </p>
+          </div>
+        </div>
+
+        {projectInvoices.length === 0 ? (
+          <p className="text-center py-6 text-sm text-surface-400">No invoices linked to this project</p>
+        ) : (
+          <div className="space-y-2">
+            {projectInvoices.map((inv: any) => {
+              const balance = Number(inv.total_amount) - Number(inv.paid_amount);
+              return (
+                <div key={inv.id} className="rounded-lg border border-surface-200 p-3 dark:border-surface-700">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-semibold">{inv.invoice_number}</span>
+                      <span className="badge-info text-[10px] capitalize">{inv.invoice_type}</span>
+                      <span className={`badge-${inv.status === 'paid' ? 'success' : inv.status === 'overdue' ? 'danger' : 'warning'} text-[10px]`}>{inv.status}</span>
+                    </div>
+                    <p className="text-sm font-bold">{formatCurrency(inv.total_amount)}</p>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-surface-400">
+                    <span>{inv.customer?.company_name || '—'} · {inv.issue_date?.split('T')[0] || inv.issue_date}</span>
+                    <div className="flex items-center gap-3">
+                      <span>Paid: <strong className="text-accent-600">{formatCurrency(inv.paid_amount)}</strong></span>
+                      <span>Balance: <strong className={balance > 0 ? 'text-red-600' : 'text-accent-600'}>{formatCurrency(balance)}</strong></span>
+                    </div>
+                  </div>
+                  {/* Payments */}
+                  {(inv.payments || []).length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-surface-100 dark:border-surface-700">
+                      <p className="text-[10px] text-surface-400 mb-1">Payments:</p>
+                      <div className="space-y-1">
+                        {(inv.payments || []).map((pmt: any) => (
+                          <div key={pmt.id} className="flex items-center justify-between text-xs">
+                            <span className="flex items-center gap-1">
+                              <CreditCard size={10} className="text-surface-400" />
+                              {pmt.payment_date?.split('T')[0]} · {pmt.payment_method}
+                            </span>
+                            <span className="font-medium text-accent-600">{formatCurrency(pmt.amount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderDetailTime = () => {
     if (!projectDetail) return null;
     const entries = projectDetail.time_entries || [];
@@ -680,14 +762,15 @@ export default function Projects() {
               </div>
             </div>
 
-            <div className="flex border-b border-surface-200 dark:border-surface-700">
-              {(['overview', 'tasks', 'milestones', 'time', 'expenses'] as const).map((t) => (
-                <button key={t} onClick={() => setDetailTab(t)} className={`flex-1 px-4 py-3 text-sm font-medium capitalize transition-colors border-b-2 ${detailTab === t ? 'border-primary-600 text-primary-600' : 'border-transparent text-surface-500 hover:text-surface-700'}`}>
+            <div className="flex border-b border-surface-200 dark:border-surface-700 overflow-x-auto">
+              {(['overview', 'tasks', 'milestones', 'time', 'expenses', 'invoices'] as const).map((t) => (
+                <button key={t} onClick={() => setDetailTab(t)} className={`whitespace-nowrap px-4 py-3 text-sm font-medium capitalize transition-colors border-b-2 ${detailTab === t ? 'border-primary-600 text-primary-600' : 'border-transparent text-surface-500 hover:text-surface-700'}`}>
                   {t === 'overview' && <><BarChart3 size={14} className="inline mr-1" />Overview</>}
                   {t === 'tasks' && <><CheckCircle2 size={14} className="inline mr-1" />Tasks</>}
                   {t === 'milestones' && <><Target size={14} className="inline mr-1" />Milestones</>}
                   {t === 'time' && <><Timer size={14} className="inline mr-1" />Time</>}
                   {t === 'expenses' && <><DollarSign size={14} className="inline mr-1" />Expenses</>}
+                  {t === 'invoices' && <><Receipt size={14} className="inline mr-1" />Invoices</>}
                 </button>
               ))}
             </div>
@@ -698,6 +781,7 @@ export default function Projects() {
               {detailTab === 'milestones' && renderDetailMilestones()}
               {detailTab === 'time' && renderDetailTime()}
               {detailTab === 'expenses' && renderDetailExpenses()}
+              {detailTab === 'invoices' && renderDetailInvoices()}
             </div>
           </div>
         </div>

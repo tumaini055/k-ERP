@@ -84,11 +84,12 @@ router.put('/:id', checkPermission('projects', 'canEdit'), async (req: AuthReque
     if (req.body.status === 'completed') {
       const { data: current } = await supabase
         .from('projects')
-        .select('status, budget')
+        .select('status, budget, recorded_revenue')
         .eq('id', req.params.id)
         .single();
 
-      if (current && current.status !== 'completed') {
+      // Only calculate recorded_revenue if not already set (prevents duplicate overwrites)
+      if (current && current.status !== 'completed' && !current.recorded_revenue) {
         const { data: expenses } = await supabase
           .from('expenses')
           .select('amount')
@@ -98,6 +99,9 @@ router.put('/:id', checkPermission('projects', 'canEdit'), async (req: AuthReque
         completedProfit = Math.max(0, Number(current.budget || 0) - totalExpenses);
         req.body.recorded_revenue = completedProfit;
         req.body.actual_end_date = new Date().toISOString().split('T')[0];
+      } else if (current && current.status !== 'completed' && current.recorded_revenue) {
+        // Keep existing recorded_revenue when re-completing
+        req.body.recorded_revenue = current.recorded_revenue;
       }
     }
 
@@ -413,6 +417,77 @@ router.delete('/:id/expenses/:expenseId', checkPermission('projects', 'canDelete
     res.json({ message: 'Expense deleted' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete expense' });
+  }
+});
+
+// Get project invoices (income from invoices linked to this project)
+router.get('/:id/invoices', checkPermission('projects', 'canView'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { data, error } = await supabase
+      .from('invoices')
+      .select('*, customer:customers(company_name, contact_person), payments:payments(*)')
+      .eq('project_id', req.params.id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const totalInvoiced = data?.reduce((s, inv) => s + Number(inv.total_amount), 0) || 0;
+    const totalPaid = data?.reduce((s, inv) => s + Number(inv.paid_amount), 0) || 0;
+
+    res.json({
+      data,
+      summary: {
+        total_invoiced: totalInvoiced,
+        total_paid: totalPaid,
+        total_balance: totalInvoiced - totalPaid,
+        invoice_count: data?.length || 0,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch project invoices' });
+  }
+});
+
+// Get all project income summary (aggregated across all projects for Finance)
+router.get('/income/summary', checkPermission('projects', 'canView'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { data: projects } = await supabase
+      .from('projects')
+      .select('id, name, project_code, budget, recorded_revenue, status');
+
+    const ids = projects?.map(p => p.id) || [];
+    if (ids.length === 0) {
+      res.json({ projects: [], total_invoiced: 0, total_paid: 0, total_recorded_revenue: 0 });
+      return;
+    }
+
+    const { data: invoices } = await supabase
+      .from('invoices')
+      .select('project_id, total_amount, paid_amount')
+      .in('project_id', ids);
+
+    const invoiceMap: Record<string, { invoiced: number; paid: number }> = {};
+    (invoices || []).forEach(inv => {
+      if (!invoiceMap[inv.project_id]) invoiceMap[inv.project_id] = { invoiced: 0, paid: 0 };
+      invoiceMap[inv.project_id].invoiced += Number(inv.total_amount);
+      invoiceMap[inv.project_id].paid += Number(inv.paid_amount);
+    });
+
+    const result = (projects || []).map(p => ({
+      ...p,
+      total_invoiced: invoiceMap[p.id]?.invoiced || 0,
+      total_paid: invoiceMap[p.id]?.paid || 0,
+      total_balance: (invoiceMap[p.id]?.invoiced || 0) - (invoiceMap[p.id]?.paid || 0),
+    }));
+
+    res.json({
+      projects: result,
+      total_invoiced: result.reduce((s, p) => s + p.total_invoiced, 0),
+      total_paid: result.reduce((s, p) => s + p.total_paid, 0),
+      total_recorded_revenue: result.reduce((s, p) => s + Number(p.recorded_revenue || 0), 0),
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch project income summary' });
   }
 });
 

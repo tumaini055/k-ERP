@@ -6,6 +6,7 @@ import { formatCurrency, formatDate, formatDateTime, getStatusLabel } from '../l
 import {
   DollarSign, TrendingUp, TrendingDown, FileText, Plus, X, RefreshCw,
   Search, Edit2, Trash2, CreditCard, Receipt, PieChart, Download,
+  FolderKanban, ExternalLink,
 } from 'lucide-react';
 
 const invStatusColors: Record<string, string> = {
@@ -45,6 +46,8 @@ export default function Finance() {
 
   // Revenue
   const [revenueData, setRevenueData] = useState<any>(null);
+  const [projectIncome, setProjectIncome] = useState<any[]>([]);
+  const [loadingProjectIncome, setLoadingProjectIncome] = useState(false);
 
   // Side panel
   const [selectedInv, setSelectedInv] = useState<Invoice | null>(null);
@@ -103,10 +106,23 @@ export default function Finance() {
   const fetchRevenue = async () => {
     setLoading(true);
     try {
-      const res = await dataService.getRevenue();
-      setRevenueData(res);
+      const [revRes, incomeRes] = await Promise.all([
+        dataService.getRevenue(),
+        dataService.getProjectIncomeSummary(),
+      ]);
+      setRevenueData(revRes);
+      setProjectIncome(incomeRes?.projects || []);
     } catch (error) { console.error(error); }
     setLoading(false);
+  };
+
+  const fetchProjectIncome = async () => {
+    setLoadingProjectIncome(true);
+    try {
+      const res = await dataService.getProjectIncomeSummary();
+      setProjectIncome(res?.projects || []);
+    } catch (error) { console.error(error); }
+    setLoadingProjectIncome(false);
   };
 
   useEffect(() => {
@@ -431,13 +447,13 @@ export default function Finance() {
             <p className="text-center py-12 text-surface-400">No revenue data available</p>
           ) : (
             <>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
                 <div className="card">
-                  <p className="text-sm text-surface-500">Total Revenue</p>
+                  <p className="text-sm text-surface-500">Total Revenue (Payments)</p>
                   <p className="text-3xl font-bold text-accent-600">{formatCurrency(revenueData.total_revenue)}</p>
                 </div>
                 <div className="card">
-                  <p className="text-sm text-surface-500">Transactions</p>
+                  <p className="text-sm text-surface-500">Invoice Payments</p>
                   <p className="text-3xl font-bold">{(revenueData.payments || []).length}</p>
                 </div>
                 <div className="card">
@@ -445,6 +461,12 @@ export default function Finance() {
                   <p className="text-3xl font-bold text-primary-600">
                     {formatCurrency((revenueData.payments || []).length > 0
                       ? revenueData.total_revenue / revenueData.payments.length : 0)}
+                  </p>
+                </div>
+                <div className="card">
+                  <p className="text-sm text-surface-500">Project Revenue (Invoiced)</p>
+                  <p className="text-3xl font-bold text-blue-600">
+                    {formatCurrency(projectIncome.reduce((s: number, p: any) => s + p.total_invoiced, 0))}
                   </p>
                 </div>
               </div>
@@ -470,6 +492,57 @@ export default function Finance() {
                   </div>
                 </div>
               )}
+
+              {/* ===== PROJECT INCOME BREAKDOWN ===== */}
+              <div className="card">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-sm font-semibold text-surface-700 dark:text-surface-300">
+                    <FolderKanban size={16} className="inline mr-1.5" />
+                    Income by Project
+                  </p>
+                  <button onClick={fetchProjectIncome} className="btn-secondary text-xs py-1 px-2">
+                    <RefreshCw size={12} className="mr-1" /> Refresh
+                  </button>
+                </div>
+
+                {loadingProjectIncome ? (
+                  <p className="text-center py-6"><RefreshCw size={16} className="mx-auto animate-spin text-surface-400" /></p>
+                ) : projectIncome.length === 0 ? (
+                  <p className="text-center py-6 text-surface-400">No project income data</p>
+                ) : (
+                  <div className="table-container">
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>Project</th>
+                          <th>Status</th>
+                          <th>Invoiced (TZS)</th>
+                          <th>Paid (TZS)</th>
+                          <th>Balance (TZS)</th>
+                          <th>Revenue on Complete</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {projectIncome.map((p: any) => (
+                          <tr key={p.id}>
+                            <td>
+                              <div className="flex items-center gap-1">
+                                <span className="font-medium text-sm">{p.name}</span>
+                                <span className="font-mono text-xs text-surface-400">({p.project_code})</span>
+                              </div>
+                            </td>
+                            <td><span className={`badge-${p.status === 'completed' ? 'success' : p.status === 'in_progress' ? 'warning' : 'info'}`}>{p.status?.replace('_', ' ')}</span></td>
+                            <td className="font-medium">{formatCurrency(p.total_invoiced)}</td>
+                            <td className="font-medium text-accent-600">{formatCurrency(p.total_paid)}</td>
+                            <td className={`font-medium ${p.total_balance > 0 ? 'text-red-600' : 'text-accent-600'}`}>{formatCurrency(p.total_balance)}</td>
+                            <td className="text-blue-600 font-medium">{formatCurrency(p.recorded_revenue)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
 
               {(revenueData.payments || []).length > 0 && (
                 <div className="table-container">
