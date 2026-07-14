@@ -12,7 +12,7 @@ router.get('/', checkPermission('helpdesk', 'canView'), async (req: AuthRequest,
     const { status, priority, category, page = 1, limit = 10 } = req.query;
     let query = supabase
       .from('support_tickets')
-      .select('*, customer:customers(company_name, contact_person), assigned:users(first_name, last_name)', { count: 'exact' });
+      .select('*, customer:customers!support_tickets_customer_id_fkey(company_name, contact_person), assigned:users!support_tickets_assigned_to_fkey(first_name, last_name)', { count: 'exact' });
 
     if (status) query = query.eq('status', status);
     if (priority) query = query.eq('priority', priority);
@@ -45,7 +45,7 @@ router.get('/:id', checkPermission('helpdesk', 'canView'), async (req: AuthReque
   try {
     const { data, error } = await supabase
       .from('support_tickets')
-      .select('*, customer:customers(*), assigned:users(first_name, last_name, email), responses:ticket_responses(*, user:users(first_name, last_name, role)), escalations:ticket_escalations(*)')
+      .select('*, customer:customers!support_tickets_customer_id_fkey(*), assigned:users!support_tickets_assigned_to_fkey(first_name, last_name, email), responses:ticket_responses(*, user:users!ticket_responses_user_id_fkey(first_name, last_name, role)), escalations:ticket_escalations(*)')
       .eq('id', req.params.id)
       .single();
 
@@ -111,7 +111,7 @@ router.post('/:id/responses', checkPermission('helpdesk', 'canCreate'), async (r
         message: req.body.message,
         is_internal: req.body.is_internal || false,
       })
-      .select('*, user:users(first_name, last_name, role)')
+      .select('*, user:users!ticket_responses_user_id_fkey(first_name, last_name, role)')
       .single();
 
     if (error) throw error;

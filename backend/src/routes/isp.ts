@@ -60,7 +60,7 @@ router.get('/subscribers', checkPermission('isp', 'canView'), async (req: AuthRe
     const { status, package_id, search, page = 1, limit = 10 } = req.query;
     let query = supabase
       .from('isp_subscribers')
-      .select('*, customer:customers(company_name, contact_person, phone), package:isp_packages(name, bandwidth_download, bandwidth_upload, price)', { count: 'exact' });
+      .select('*, customer:customers!isp_subscribers_customer_id_fkey(company_name, contact_person, phone), package:isp_packages!isp_subscribers_package_id_fkey(name, bandwidth_download, bandwidth_upload, price)', { count: 'exact' });
 
     if (status) query = query.eq('service_status', status);
     if (package_id) query = query.eq('package_id', package_id);
@@ -125,7 +125,7 @@ router.get('/billing', checkPermission('isp', 'canView'), async (req: AuthReques
     const { status, subscriber_id, page = 1, limit = 10 } = req.query;
     let query = supabase
       .from('isp_billing')
-      .select('*, subscriber:isp_subscribers(subscriber_code, customer:customers(company_name))', { count: 'exact' });
+      .select('*, subscriber:isp_subscribers!isp_billing_subscriber_id_fkey(subscriber_code, customer:customers!isp_subscribers_customer_id_fkey(company_name))', { count: 'exact' });
 
     if (status) query = query.eq('status', status);
     if (subscriber_id) query = query.eq('subscriber_id', subscriber_id);

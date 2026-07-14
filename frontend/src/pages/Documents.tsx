@@ -153,7 +153,7 @@ export default function Documents() {
           <button onClick={() => setShowFolder(true)} className="btn-secondary">
             <Folder size={18} className="mr-1" /> New Folder
           </button>
-          <button onClick={() => setShowUpload(true)} className="btn-primary">
+          <button onClick={() => { setUploadForm(prev => ({ ...prev, folder_id: folderFilter !== 'all' ? folderFilter : '' })); setShowUpload(true); }} className="btn-primary">
             <Upload size={18} className="mr-1" /> Upload
           </button>
         </div>

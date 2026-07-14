@@ -136,20 +136,30 @@ export const dataService = {
     return data;
   },
   async downloadInvoicePdf(invoiceId: string) {
-    const token = localStorage.getItem('token');
-    const res = await fetch(`/api/finance/invoices/${invoiceId}/pdf`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) throw new Error(`Download failed: ${res.status}`);
-    const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `invoice-${invoiceId}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    window.URL.revokeObjectURL(url);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/finance/invoices/${invoiceId}/pdf`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || `Download failed: ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const contentDisp = res.headers.get('content-disposition');
+      const match = contentDisp?.match(/filename="(.+?)"/);
+      a.download = match ? match[1] : `document-${invoiceId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('PDF download failed:', err);
+      throw err;
+    }
   },
   async getExpenses(params?: any) {
     const { data } = await api.get('/finance/expenses', { params });
@@ -166,6 +176,70 @@ export const dataService = {
   async getRevenue(params?: any) {
     const { data } = await api.get('/finance/revenue', { params });
     return data;
+  },
+
+  // Cash Requests
+  async getCashRequests(params?: any) {
+    const { data } = await api.get('/finance/cash-requests', { params });
+    return data;
+  },
+  async getCashRequest(id: string) {
+    const { data } = await api.get(`/finance/cash-requests/${id}`);
+    return data;
+  },
+  async createCashRequest(body: any) {
+    const { data } = await api.post('/finance/cash-requests', body);
+    return data;
+  },
+  async approveCashRequest(id: string) {
+    const { data } = await api.put(`/finance/cash-requests/${id}/approve`);
+    return data;
+  },
+  async rejectCashRequest(id: string, reason?: string) {
+    const { data } = await api.put(`/finance/cash-requests/${id}/reject`, { rejection_reason: reason });
+    return data;
+  },
+  async disburseCashRequest(id: string) {
+    const { data } = await api.put(`/finance/cash-requests/${id}/disburse`);
+    return data;
+  },
+  async cancelCashRequest(id: string) {
+    const { data } = await api.put(`/finance/cash-requests/${id}/cancel`);
+    return data;
+  },
+  async deleteCashRequest(id: string) {
+    const { data } = await api.delete(`/finance/cash-requests/${id}`);
+    return data;
+  },
+  async getCashRequestSummary() {
+    const { data } = await api.get('/finance/cash-requests/summary');
+    return data;
+  },
+  async downloadCashRequestPdf(cashRequestId: string) {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/finance/cash-requests/${cashRequestId}/pdf`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || `Download failed: ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const contentDisp = res.headers.get('content-disposition');
+      const match = contentDisp?.match(/filename="(.+?)"/);
+      a.download = match ? match[1] : `cash-request-${cashRequestId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Cash request PDF download failed:', err);
+      throw err;
+    }
   },
 
   // Dashboard
@@ -455,6 +529,37 @@ export const dataService = {
   async getEmployeeReport() {
     const { data } = await api.get('/reports/employees');
     return data;
+  },
+  async getFinancialReport(params?: any) {
+    const { data } = await api.get('/reports/financial', { params });
+    return data;
+  },
+  async downloadFinancialReportPdf(params?: any) {
+    try {
+      const token = localStorage.getItem('token');
+      const query = new URLSearchParams();
+      if (params) {
+        Object.entries(params).forEach(([k, v]) => { if (v != null) query.set(k, String(v)); });
+      }
+      const res = await fetch(`/api/reports/financial/pdf?${query.toString()}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) { const errText = await res.text(); throw new Error(errText || `Download failed: ${res.status}`); }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const contentDisp = res.headers.get('content-disposition');
+      const match = contentDisp?.match(/filename="(.+?)"/);
+      a.download = match ? match[1] : 'financial-report.pdf';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Financial report PDF download failed:', err);
+      throw err;
+    }
   },
 
   // Events

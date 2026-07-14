@@ -12,7 +12,7 @@ router.get('/', checkPermission('events', 'canView'), async (req: AuthRequest, r
     const { from, to } = req.query;
     let query = supabase
       .from('events')
-      .select('*, creator:users(first_name, last_name), attendees:event_attendees(user_id)')
+      .select('*, creator:users!events_created_by_fkey(first_name, last_name), attendees:event_attendees(user_id)')
       .order('start_time', { ascending: true });
 
     if (from) query = query.gte('start_time', from);
@@ -38,11 +38,11 @@ router.get('/feed', checkPermission('events', 'canView'), async (req: AuthReques
 
     const [eventsRes, tasksRes, milestonesRes, contractsRes, leaveRes, ticketsRes] = await Promise.all([
       supabase.from('events').select('*').gte('start_time', f).lte('end_time', t).order('start_time'),
-      supabase.from('project_tasks').select('*, project:projects(name), assignee:users(first_name, last_name)').not('due_date', 'is', null).gte('due_date', fd).lte('due_date', td),
+      supabase.from('project_tasks').select('*, project:projects(name), assignee:users!project_tasks_assigned_to_fkey(first_name, last_name)').not('due_date', 'is', null).gte('due_date', fd).lte('due_date', td),
       supabase.from('project_milestones').select('*, project:projects(name)').not('due_date', 'is', null).gte('due_date', fd).lte('due_date', td),
-      supabase.from('service_contracts').select('*, customer:customers(company_name)').gte('end_date', fd).lte('end_date', td),
-      supabase.from('leave_requests').select('*, employee:users(first_name, last_name)').gte('start_date', fd).lte('end_date', td),
-      supabase.from('support_tickets').select('*, customer:customers(company_name)').not('due_date', 'is', null).gte('due_date', f).lte('due_date', t),
+      supabase.from('service_contracts').select('*, customer:customers!service_contracts_customer_id_fkey(company_name)').gte('end_date', fd).lte('end_date', td),
+      supabase.from('leave_requests').select('*, employee:users!leave_requests_user_id_fkey(first_name, last_name)').gte('start_date', fd).lte('end_date', td),
+      supabase.from('support_tickets').select('*, customer:customers!support_tickets_customer_id_fkey(company_name)').not('due_date', 'is', null).gte('due_date', f).lte('due_date', t),
     ]);
 
     const feed: any[] = [];
@@ -84,7 +84,7 @@ router.post('/', checkPermission('events', 'canCreate'), async (req: AuthRequest
     const { data, error } = await supabase
       .from('events')
       .insert({ ...req.body, created_by: req.user!.id, company_id: req.user!.company_id })
-      .select('*, creator:users(first_name, last_name)')
+      .select('*, creator:users!events_created_by_fkey(first_name, last_name)')
       .single();
 
     if (error) throw error;
@@ -101,7 +101,7 @@ router.put('/:id', checkPermission('events', 'canEdit'), async (req: AuthRequest
       .from('events')
       .update({ ...req.body, updated_at: new Date().toISOString() })
       .eq('id', req.params.id)
-      .select('*, creator:users(first_name, last_name)')
+      .select('*, creator:users!events_created_by_fkey(first_name, last_name)')
       .single();
 
     if (error) throw error;

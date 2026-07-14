@@ -68,7 +68,7 @@ router.get('/leave-requests', checkPermission('employees', 'canView'), async (re
   try {
     let query = supabase
       .from('leave_requests')
-      .select('*, user:users(first_name, last_name, department), approver:users(first_name, last_name)');
+      .select('*, user:users!leave_requests_user_id_fkey(first_name, last_name, department), approver:users!leave_requests_approved_by_fkey(first_name, last_name)');
 
     if (['engineer'].includes(req.user!.role)) {
       query = query.eq('user_id', req.user!.id);
@@ -178,8 +178,27 @@ router.get('/:id/attendance', checkPermission('employees', 'canView'), async (re
       .select('*')
       .eq('user_id', req.params.id);
 
-    if (month) query = query.eq('date.extract.month', month);
-    if (year) query = query.eq('date.extract.year', year);
+    const monthStr = month ? String(month) : '';
+    const yearStr = year ? String(year) : '';
+
+    if (monthStr && yearStr) {
+      const start = `${yearStr}-${monthStr.padStart(2, '0')}-01`;
+      const endMonth = parseInt(monthStr) + 1;
+      const endYear = endMonth > 12 ? parseInt(yearStr) + 1 : parseInt(yearStr);
+      const endMonthStr = endMonth > 12 ? '01' : String(endMonth).padStart(2, '0');
+      const end = `${endYear}-${endMonthStr}-01`;
+      query = query.gte('date', start).lt('date', end);
+    } else if (yearStr) {
+      query = query.gte('date', `${yearStr}-01-01`).lt('date', `${parseInt(yearStr) + 1}-01-01`);
+    } else if (monthStr) {
+      const currentYear = new Date().getFullYear();
+      const start = `${currentYear}-${monthStr.padStart(2, '0')}-01`;
+      const endMonth = parseInt(monthStr) + 1;
+      const endYear = endMonth > 12 ? currentYear + 1 : currentYear;
+      const endMonthStr = endMonth > 12 ? '01' : String(endMonth).padStart(2, '0');
+      const end = `${endYear}-${endMonthStr}-01`;
+      query = query.gte('date', start).lt('date', end);
+    }
 
     const { data, error } = await query.order('date', { ascending: false });
 

@@ -15,7 +15,7 @@ router.get('/', checkPermission('documents', 'canView'), async (req: AuthRequest
     const { folder_id, type, search, page = 1, limit = 20 } = req.query;
     let query = supabase
       .from('documents')
-      .select('*, uploader:users(first_name, last_name)', { count: 'exact' });
+      .select('*, uploader:users!documents_uploaded_by_fkey(first_name, last_name)', { count: 'exact' });
 
     if (folder_id) query = query.eq('folder_id', folder_id);
     if (type) query = query.eq('type', type);
@@ -64,7 +64,12 @@ router.post('/', checkPermission('documents', 'canCreate'), upload.single('file'
 
     let fileUrl = body.file_url;
     if (file) {
-      fileUrl = await uploadToStorage(file, req.user!.id);
+      try {
+        fileUrl = await uploadToStorage(file, req.user!.id);
+      } catch (storageErr) {
+        console.warn('Storage upload failed, saving document without file:', (storageErr as Error).message);
+        fileUrl = `local://${file.originalname}`;
+      }
     }
 
     const { data, error } = await supabase
@@ -82,12 +87,16 @@ router.post('/', checkPermission('documents', 'canCreate'), upload.single('file'
         uploaded_by: req.user!.id,
         company_id: req.user!.company_id,
       })
-      .select('*, uploader:users(first_name, last_name)')
+      .select('*, uploader:users!documents_uploaded_by_fkey(first_name, last_name)')
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Document insert error:', error.message, error.code, error.details);
+      throw error;
+    }
     res.status(201).json({ data });
   } catch (error) {
+    console.error('Document upload error:', error);
     res.status(500).json({ error: 'Failed to upload document' });
   }
 });
@@ -138,7 +147,7 @@ router.get('/:id', checkPermission('documents', 'canView'), async (req: AuthRequ
   try {
     const { data, error } = await supabase
       .from('documents')
-      .select('*, uploader:users(first_name, last_name), versions:document_versions(*, uploader:users(first_name, last_name))')
+      .select('*, uploader:users!documents_uploaded_by_fkey(first_name, last_name), versions:document_versions(*, uploader:users!document_versions_uploaded_by_fkey(first_name, last_name))')
       .eq('id', req.params.id)
       .single();
 
@@ -156,7 +165,7 @@ router.put('/:id', checkPermission('documents', 'canEdit'), async (req: AuthRequ
       .from('documents')
       .update({ ...req.body, updated_at: new Date().toISOString() })
       .eq('id', req.params.id)
-      .select('*, uploader:users(first_name, last_name)')
+      .select('*, uploader:users!documents_uploaded_by_fkey(first_name, last_name)')
       .single();
 
     if (error) throw error;
@@ -194,7 +203,12 @@ router.post('/:id/versions', checkPermission('documents', 'canCreate'), upload.s
 
     const { data: doc } = await supabase.from('documents').select('version').eq('id', req.params.id).single();
     const newVersion = (doc?.version || 0) + 1;
-    const fileUrl = await uploadToStorage(file, req.user!.id);
+    let fileUrl: string | null = null;
+    try {
+      fileUrl = await uploadToStorage(file, req.user!.id);
+    } catch (storageErr) {
+      console.warn('Storage upload failed for version:', (storageErr as Error).message);
+    }
 
     const { data: version, error: verErr } = await supabase
       .from('document_versions')

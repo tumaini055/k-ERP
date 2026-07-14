@@ -11,7 +11,7 @@ router.get('/', checkPermission('contracts', 'canView'), async (req: AuthRequest
     const { status, type, customer_id, page = 1, limit = 10 } = req.query;
     let query = supabase
       .from('service_contracts')
-      .select('*, customer:customers(company_name, contact_person, phone)', { count: 'exact' });
+      .select('*, customer:customers!service_contracts_customer_id_fkey(company_name, contact_person, phone)', { count: 'exact' });
 
     if (status) query = query.eq('status', status);
     if (type) query = query.eq('contract_type', type);
@@ -38,7 +38,7 @@ router.get('/:id', checkPermission('contracts', 'canView'), async (req: AuthRequ
   try {
     const { data, error } = await supabase
       .from('service_contracts')
-      .select('*, customer:customers(*), renewals:contract_renewals(*)')
+      .select('*, customer:customers!service_contracts_customer_id_fkey(*), renewals:contract_renewals(*)')
       .eq('id', req.params.id)
       .single();
 
@@ -135,7 +135,7 @@ router.get('/expiring', checkPermission('contracts', 'canView'), async (req: Aut
 
     const { data, error } = await supabase
       .from('service_contracts')
-      .select('*, customer:customers(company_name, contact_person, phone)')
+      .select('*, customer:customers!service_contracts_customer_id_fkey(company_name, contact_person, phone)')
       .lte('end_date', thirtyDaysFromNow.toISOString().split('T')[0])
       .gte('end_date', new Date().toISOString().split('T')[0])
       .eq('status', 'active')

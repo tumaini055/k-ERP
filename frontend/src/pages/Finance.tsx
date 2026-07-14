@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { dataService } from '../services/dataService';
-import { Invoice, Expense, InvoiceItem, Payment } from '../types';
+import { Invoice, Expense, InvoiceItem, Payment, CashRequest } from '../types';
 import { formatCurrency, formatDate, formatDateTime, getStatusLabel } from '../lib/utils';
+import { useAuth } from '../context/AuthContext';
 import {
   DollarSign, TrendingUp, TrendingDown, FileText, Plus, X, RefreshCw,
   Search, Edit2, Trash2, CreditCard, Receipt, PieChart, Download,
-  FolderKanban, ExternalLink,
+  FolderKanban, ExternalLink, Banknote, Clock, CheckCircle2, XCircle, Ban,
 } from 'lucide-react';
 
 const invStatusColors: Record<string, string> = {
@@ -26,9 +27,10 @@ const paymentMethodLabels: Record<string, string> = {
   cheque: 'Cheque', card: 'Card',
 };
 
-type TabType = 'invoices' | 'expenses' | 'revenue';
+type TabType = 'invoices' | 'expenses' | 'revenue' | 'cash_requests';
 
 export default function Finance() {
+  const { user } = useAuth();
   const [tab, setTab] = useState<TabType>('invoices');
   const [loading, setLoading] = useState(true);
 
@@ -73,6 +75,27 @@ export default function Finance() {
     category: 'other', description: '', amount: 0, expense_date: new Date().toISOString().split('T')[0],
     project_id: '', paid_to: '', payment_method: 'cash',
   });
+
+  // Cash Requests
+  const [cashRequests, setCashRequests] = useState<CashRequest[]>([]);
+  const [cashReqStatusFilter, setCashReqStatusFilter] = useState('');
+  const [cashReqSummary, setCashReqSummary] = useState<any>(null);
+  const [showCashReqModal, setShowCashReqModal] = useState(false);
+  const [cashReqForm, setCashReqForm] = useState({
+    amount: 0, purpose: '', category: 'general', payment_method: 'cash', notes: '',
+  });
+  const [selectedCashReq, setSelectedCashReq] = useState<CashRequest | null>(null);
+  const [showCashReqDetail, setShowCashReqDetail] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejectTargetId, setRejectTargetId] = useState('');
+  const [cashReqActionLoading, setCashReqActionLoading] = useState(false);
+
+  const cashReqCategories = ['general', 'office_supplies', 'travel', 'project_expenses', 'utilities', 'maintenance', 'emergency', 'other'];
+  const cashReqStatusColors: Record<string, string> = {
+    pending: 'badge-warning', approved: 'badge-info', rejected: 'badge-danger',
+    disbursed: 'badge-success', cancelled: 'badge-danger',
+  };
 
   const [customers, setCustomers] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
@@ -125,11 +148,95 @@ export default function Finance() {
     setLoadingProjectIncome(false);
   };
 
+  const fetchCashRequests = async () => {
+    setLoading(true);
+    try {
+      const params: any = { limit: 100 };
+      if (cashReqStatusFilter) params.status = cashReqStatusFilter;
+      const res = await dataService.getCashRequests(params);
+      setCashRequests(res?.data || []);
+    } catch (error) { console.error(error); }
+    setLoading(false);
+  };
+
+  const fetchCashReqSummary = async () => {
+    try {
+      const res = await dataService.getCashRequestSummary();
+      setCashReqSummary(res);
+    } catch (error) { console.error(error); }
+  };
+
+  const handleCreateCashRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cashReqForm.amount || !cashReqForm.purpose) { toast.error('Amount and purpose are required'); return; }
+    try {
+      await dataService.createCashRequest(cashReqForm);
+      toast.success('Cash request submitted');
+      setShowCashReqModal(false);
+      setCashReqForm({ amount: 0, purpose: '', category: 'general', payment_method: 'cash', notes: '' });
+      fetchCashRequests();
+      fetchCashReqSummary();
+    } catch (error) { toast.error('Failed to submit cash request'); }
+  };
+
+  const handleApproveCashRequest = async (id: string) => {
+    setCashReqActionLoading(true);
+    try {
+      await dataService.approveCashRequest(id);
+      toast.success('Cash request approved');
+      setShowCashReqDetail(false);
+      fetchCashRequests();
+      fetchCashReqSummary();
+    } catch (error) { toast.error('Failed to approve'); }
+    setCashReqActionLoading(false);
+  };
+
+  const handleRejectCashRequest = async () => {
+    setCashReqActionLoading(true);
+    try {
+      await dataService.rejectCashRequest(rejectTargetId, rejectReason);
+      toast.success('Cash request rejected');
+      setShowRejectModal(false);
+      setShowCashReqDetail(false);
+      setRejectReason('');
+      fetchCashRequests();
+      fetchCashReqSummary();
+    } catch (error) { toast.error('Failed to reject'); }
+    setCashReqActionLoading(false);
+  };
+
+  const handleDisburseCashRequest = async (id: string) => {
+    setCashReqActionLoading(true);
+    try {
+      await dataService.disburseCashRequest(id);
+      toast.success('Cash disbursed successfully');
+      setShowCashReqDetail(false);
+      fetchCashRequests();
+      fetchCashReqSummary();
+    } catch (error) { toast.error('Failed to disburse'); }
+    setCashReqActionLoading(false);
+  };
+
+  const handleDeleteCashRequest = async (id: string) => {
+    if (!confirm('Delete this cash request?')) return;
+    try {
+      await dataService.deleteCashRequest(id);
+      toast.success('Cash request deleted');
+      fetchCashRequests();
+      fetchCashReqSummary();
+    } catch (error) { toast.error('Failed to delete'); }
+  };
+
+  const isApprover = (user?: any) => {
+    return user && ['super_admin', 'ceo', 'managing_director', 'accountant'].includes(user.role);
+  };
+
   useEffect(() => {
     if (tab === 'invoices') fetchInvoices();
     else if (tab === 'expenses') fetchExpenses();
+    else if (tab === 'cash_requests') { fetchCashRequests(); fetchCashReqSummary(); }
     else fetchRevenue();
-  }, [tab, invSearch, invStatusFilter, invTypeFilter, expCatFilter, expFromDate, expToDate]);
+  }, [tab, invSearch, invStatusFilter, invTypeFilter, expCatFilter, expFromDate, expToDate, cashReqStatusFilter]);
 
   useEffect(() => {
     dataService.getCustomers({ limit: 500 }).then((r: any) => setCustomers(r.data || [])).catch(() => {});
@@ -248,13 +355,14 @@ export default function Finance() {
 
   const renderTabBar = () => (
     <div className="flex border-b border-surface-200 dark:border-surface-700 mb-6">
-      {(['invoices', 'expenses', 'revenue'] as const).map((t) => (
+      {(['invoices', 'expenses', 'cash_requests', 'revenue'] as const).map((t) => (
         <button key={t} onClick={() => setTab(t)}
           className={`px-5 py-3 text-sm font-medium capitalize transition-colors border-b-2 ${
             tab === t ? 'border-primary-600 text-primary-600' : 'border-transparent text-surface-500 hover:text-surface-700'
           }`}>
           {t === 'invoices' && <><Receipt size={14} className="inline mr-1.5" />Invoices</>}
           {t === 'expenses' && <><TrendingDown size={14} className="inline mr-1.5" />Expenses</>}
+          {t === 'cash_requests' && <><Banknote size={14} className="inline mr-1.5" />Cash Requests</>}
           {t === 'revenue' && <><PieChart size={14} className="inline mr-1.5" />Revenue</>}
         </button>
       ))}
@@ -275,7 +383,7 @@ export default function Finance() {
           <p className="page-subtitle">Manage invoices, payments, expenses, and revenue</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => { if (tab === 'invoices') fetchInvoices(); else if (tab === 'expenses') fetchExpenses(); else fetchRevenue(); }} className="btn-secondary">
+          <button onClick={() => { if (tab === 'invoices') fetchInvoices(); else if (tab === 'expenses') fetchExpenses(); else if (tab === 'cash_requests') { fetchCashRequests(); fetchCashReqSummary(); } else fetchRevenue(); }} className="btn-secondary">
             <RefreshCw size={16} className="mr-1" /> Refresh
           </button>
           {tab === 'invoices' && (
@@ -288,10 +396,15 @@ export default function Finance() {
               <Plus size={18} className="mr-1" /> Add Expense
             </button>
           )}
+          {tab === 'cash_requests' && (
+            <button onClick={() => setShowCashReqModal(true)} className="btn-primary">
+              <Plus size={18} className="mr-1" /> Request Cash
+            </button>
+          )}
         </div>
       </div>
 
-      {tab !== 'revenue' && (
+      {tab !== 'revenue' && tab !== 'cash_requests' && (
         <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-4">
           <div className="stat-card">
             <div className="stat-icon shrink-0 bg-accent-100 text-accent-600"><TrendingUp size={22} /></div>
@@ -438,6 +551,85 @@ export default function Finance() {
         </>
       )}
 
+      {/* ===== CASH REQUESTS TAB ===== */}
+      {tab === 'cash_requests' && (
+        <>
+          {/* Stat Cards */}
+          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-4">
+            <div className="stat-card">
+              <div className="stat-icon shrink-0 bg-yellow-100 text-yellow-600"><Clock size={22} /></div>
+              <div className="min-w-0 overflow-hidden"><p className="stat-value">{cashReqSummary?.pending || 0}</p><p className="stat-label">Pending Requests</p></div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-icon shrink-0 bg-blue-100 text-blue-600"><CheckCircle2 size={22} /></div>
+              <div className="min-w-0 overflow-hidden"><p className="stat-value">{cashReqSummary?.approved || 0}</p><p className="stat-label">Approved</p></div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-icon shrink-0 bg-accent-100 text-accent-600"><Banknote size={22} /></div>
+              <div className="min-w-0 overflow-hidden"><p className="stat-value">{formatCurrency(cashReqSummary?.total_disbursed || 0)}</p><p className="stat-label">Total Disbursed</p></div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-icon shrink-0 bg-red-100 text-red-600"><DollarSign size={22} /></div>
+              <div className="min-w-0 overflow-hidden"><p className="stat-value">{formatCurrency(cashReqSummary?.total_requested || 0)}</p><p className="stat-label">Total Requested</p></div>
+            </div>
+          </div>
+
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <select className="input w-auto min-w-[130px]" value={cashReqStatusFilter} onChange={e => setCashReqStatusFilter(e.target.value)}>
+              <option value="">All Status</option>
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+              <option value="disbursed">Disbursed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+
+          <div className="table-container">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Reference</th>
+                  <th>Requested By</th>
+                  <th>Amount</th>
+                  <th>Purpose</th>
+                  <th>Category</th>
+                  <th>Method</th>
+                  <th>Status</th>
+                  <th>Date</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={9} className="text-center py-12"><RefreshCw size={20} className="mx-auto animate-spin text-surface-400" /></td></tr>
+                ) : cashRequests.length === 0 ? (
+                  <tr><td colSpan={9} className="text-center py-12 text-surface-400">No cash requests found</td></tr>
+                ) : (
+                  cashRequests.map((cr) => (
+                    <tr key={cr.id} className="cursor-pointer" onClick={() => { setSelectedCashReq(cr); setShowCashReqDetail(true); }}>
+                      <td className="font-mono text-xs">{cr.reference_number}</td>
+                      <td className="text-sm">{cr.requested_by_user ? `${cr.requested_by_user.first_name} ${cr.requested_by_user.last_name}` : '-'}</td>
+                      <td className="font-medium">{formatCurrency(cr.amount)}</td>
+                      <td className="max-w-[200px] truncate text-sm">{cr.purpose}</td>
+                      <td className="text-xs capitalize">{getStatusLabel(cr.category)}</td>
+                      <td className="text-xs capitalize">{paymentMethodLabels[cr.payment_method] || cr.payment_method}</td>
+                      <td><span className={cashReqStatusColors[cr.status]}>{getStatusLabel(cr.status)}</span></td>
+                      <td className="text-xs">{formatDate(cr.created_at)}</td>
+                      <td>
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteCashRequest(cr.id); }} className="text-red-400 hover:text-red-600 p-1">
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
       {/* ===== REVENUE TAB ===== */}
       {tab === 'revenue' && (
         <div className="space-y-6">
@@ -449,47 +641,90 @@ export default function Finance() {
             <>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
                 <div className="card">
-                  <p className="text-sm text-surface-500">Total Revenue (Payments)</p>
-                  <p className="text-3xl font-bold text-accent-600">{formatCurrency(revenueData.total_revenue)}</p>
+                  <p className="text-sm text-surface-500">Net Profit</p>
+                  <p className={`text-3xl font-bold ${revenueData.profit >= 0 ? 'text-accent-600' : 'text-red-600'}`}>{formatCurrency(revenueData.profit)}</p>
+                  <p className="text-xs text-surface-400 mt-1">Revenue - Expenses</p>
                 </div>
                 <div className="card">
-                  <p className="text-sm text-surface-500">Invoice Payments</p>
-                  <p className="text-3xl font-bold">{(revenueData.payments || []).length}</p>
+                  <p className="text-sm text-surface-500">Total Revenue</p>
+                  <p className="text-3xl font-bold text-primary-600">{formatCurrency(revenueData.total_revenue)}</p>
+                  <p className="text-xs text-surface-400 mt-1">{(revenueData.payments || []).length} payments</p>
+                </div>
+                <div className="card">
+                  <p className="text-sm text-surface-500">Total Expenses</p>
+                  <p className="text-3xl font-bold text-red-600">{formatCurrency(revenueData.total_expenses)}</p>
+                  <p className="text-xs text-surface-400 mt-1">{Object.keys(revenueData.expenses_by_category || {}).length} categories</p>
                 </div>
                 <div className="card">
                   <p className="text-sm text-surface-500">Avg per Transaction</p>
-                  <p className="text-3xl font-bold text-primary-600">
+                  <p className="text-3xl font-bold text-blue-600">
                     {formatCurrency((revenueData.payments || []).length > 0
                       ? revenueData.total_revenue / revenueData.payments.length : 0)}
                   </p>
                 </div>
-                <div className="card">
-                  <p className="text-sm text-surface-500">Project Revenue (Invoiced)</p>
-                  <p className="text-3xl font-bold text-blue-600">
-                    {formatCurrency(projectIncome.reduce((s: number, p: any) => s + p.total_invoiced, 0))}
-                  </p>
-                </div>
               </div>
 
-              {revenueData.by_method && Object.keys(revenueData.by_method).length > 0 && (
-                <div className="card">
-                  <p className="text-sm font-semibold text-surface-700 dark:text-surface-300 mb-4">Revenue by Payment Method</p>
-                  <div className="space-y-3">
-                    {Object.entries(revenueData.by_method).map(([method, amount]: [string, any]) => {
-                      const pct = revenueData.total_revenue > 0 ? (Number(amount) / revenueData.total_revenue) * 100 : 0;
-                      return (
-                        <div key={method}>
-                          <div className="flex items-center justify-between text-sm mb-1">
-                            <span className="font-medium capitalize">{paymentMethodLabels[method] || method}</span>
-                            <span className="font-semibold">{formatCurrency(Number(amount))} <span className="text-xs text-surface-400">({pct.toFixed(1)}%)</span></span>
-                          </div>
-                          <div className="h-2 rounded-full bg-surface-200 dark:bg-surface-700">
-                            <div className="h-2 rounded-full bg-primary-500 transition-all" style={{ width: `${pct}%` }} />
-                          </div>
-                        </div>
-                      );
-                    })}
+              {revenueData.profit >= 0 ? (
+                <div className="rounded-lg border border-accent-200 bg-accent-50 p-4 dark:border-accent-800 dark:bg-accent-900/20">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp size={18} className="text-accent-600" />
+                    <p className="text-sm font-semibold text-accent-700">Your company is profitable this period</p>
                   </div>
+                  <p className="text-xs text-accent-600 mt-1">Net profit margin: {revenueData.total_revenue > 0 ? ((revenueData.profit / revenueData.total_revenue) * 100).toFixed(1) : 0}%</p>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
+                  <div className="flex items-center gap-2">
+                    <TrendingDown size={18} className="text-red-600" />
+                    <p className="text-sm font-semibold text-red-700">Your company is running at a loss this period</p>
+                  </div>
+                  <p className="text-xs text-red-600 mt-1">Net loss margin: {revenueData.total_revenue > 0 ? ((revenueData.profit / revenueData.total_revenue) * 100).toFixed(1) : 0}%</p>
+                </div>
+              )}
+
+              {revenueData.by_method && Object.keys(revenueData.by_method).length > 0 && (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="card">
+                    <p className="text-sm font-semibold text-surface-700 dark:text-surface-300 mb-4">Revenue by Payment Method</p>
+                    <div className="space-y-3">
+                      {Object.entries(revenueData.by_method).map(([method, amount]: [string, any]) => {
+                        const pct = revenueData.total_revenue > 0 ? (Number(amount) / revenueData.total_revenue) * 100 : 0;
+                        return (
+                          <div key={method}>
+                            <div className="flex items-center justify-between text-sm mb-1">
+                              <span className="font-medium capitalize">{paymentMethodLabels[method] || method}</span>
+                              <span className="font-semibold">{formatCurrency(Number(amount))} <span className="text-xs text-surface-400">({pct.toFixed(1)}%)</span></span>
+                            </div>
+                            <div className="h-2 rounded-full bg-surface-200 dark:bg-surface-700">
+                              <div className="h-2 rounded-full bg-primary-500 transition-all" style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {revenueData.expenses_by_category && Object.keys(revenueData.expenses_by_category).length > 0 && (
+                    <div className="card">
+                      <p className="text-sm font-semibold text-surface-700 dark:text-surface-300 mb-4">Expenses by Category</p>
+                      <div className="space-y-3">
+                        {Object.entries(revenueData.expenses_by_category).map(([category, amount]: [string, any]) => {
+                          const pct = revenueData.total_expenses > 0 ? (Number(amount) / revenueData.total_expenses) * 100 : 0;
+                          return (
+                            <div key={category}>
+                              <div className="flex items-center justify-between text-sm mb-1">
+                                <span className="font-medium capitalize">{getStatusLabel(category)}</span>
+                                <span className="font-semibold">{formatCurrency(Number(amount))} <span className="text-xs text-surface-400">({pct.toFixed(1)}%)</span></span>
+                              </div>
+                              <div className="h-2 rounded-full bg-surface-200 dark:bg-surface-700">
+                                <div className="h-2 rounded-full bg-red-500 transition-all" style={{ width: `${pct}%` }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -919,6 +1154,168 @@ export default function Finance() {
                 <button type="submit" className="btn-primary"><Plus size={14} className="mr-1" /> Add Expense</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===== CASH REQUEST DETAIL SIDE PANEL ===== */}
+      {showCashReqDetail && selectedCashReq && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/30">
+          <div className="w-full max-w-lg bg-white shadow-xl overflow-y-auto dark:bg-surface-800">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-surface-200 bg-white p-4 dark:border-surface-700 dark:bg-surface-800">
+              <div>
+                <h2 className="text-lg font-semibold">{selectedCashReq.reference_number}</h2>
+                <p className="text-xs text-surface-500 capitalize">{getStatusLabel(selectedCashReq.category)} request</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => dataService.downloadCashRequestPdf(selectedCashReq.id).catch(() => toast.error('Failed to download PDF'))} className="btn-secondary text-xs py-1.5 px-3">
+                  <Download size={14} className="mr-1 inline" /> PDF
+                </button>
+                <button onClick={() => { setShowCashReqDetail(false); setSelectedCashReq(null); }} className="rounded-lg p-2 text-surface-400 hover:bg-surface-100"><X size={20} /></button>
+              </div>
+            </div>
+            <div className="p-5 space-y-5">
+              <div className="flex items-center justify-between">
+                <span className={cashReqStatusColors[selectedCashReq.status]}>{getStatusLabel(selectedCashReq.status)}</span>
+                <span className="text-2xl font-bold text-primary-600">{formatCurrency(selectedCashReq.amount)}</span>
+              </div>
+
+              <div className="rounded-lg border border-surface-200 p-4 dark:border-surface-700 space-y-3">
+                <div className="flex justify-between text-sm"><span className="text-surface-500">Reference</span><span className="font-mono">{selectedCashReq.reference_number}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-surface-500">Requested By</span><span className="font-medium">{selectedCashReq.requested_by_user ? `${selectedCashReq.requested_by_user.first_name} ${selectedCashReq.requested_by_user.last_name}` : '-'}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-surface-500">Email</span><span>{selectedCashReq.requested_by_user?.email || '-'}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-surface-500">Category</span><span className="capitalize">{getStatusLabel(selectedCashReq.category)}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-surface-500">Payment Method</span><span className="capitalize">{paymentMethodLabels[selectedCashReq.payment_method] || selectedCashReq.payment_method}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-surface-500">Requested On</span><span>{formatDateTime(selectedCashReq.created_at)}</span></div>
+              </div>
+
+              <div>
+                <p className="text-xs text-surface-500 mb-1">Purpose</p>
+                <p className="text-sm bg-surface-50 dark:bg-surface-700 rounded-lg p-3">{selectedCashReq.purpose}</p>
+              </div>
+
+              {selectedCashReq.notes && (
+                <div>
+                  <p className="text-xs text-surface-500 mb-1">Notes</p>
+                  <p className="text-sm">{selectedCashReq.notes}</p>
+                </div>
+              )}
+
+              {selectedCashReq.status === 'rejected' && selectedCashReq.rejection_reason && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20">
+                  <p className="text-xs font-medium text-red-600 mb-1">Rejection Reason</p>
+                  <p className="text-sm text-red-700 dark:text-red-400">{selectedCashReq.rejection_reason}</p>
+                </div>
+              )}
+
+              {selectedCashReq.approved_by_user && (
+                <div className="rounded-lg border border-surface-200 p-3 dark:border-surface-700">
+                  <p className="text-xs text-surface-500 mb-1">{selectedCashReq.status === 'rejected' ? 'Reviewed' : 'Approved'} by</p>
+                  <p className="text-sm font-medium">{selectedCashReq.approved_by_user.first_name} {selectedCashReq.approved_by_user.last_name}</p>
+                  {selectedCashReq.approved_at && <p className="text-xs text-surface-400">{formatDateTime(selectedCashReq.approved_at)}</p>}
+                </div>
+              )}
+
+              {selectedCashReq.disbursed_by_user && (
+                <div className="rounded-lg border border-accent-200 bg-accent-50 p-3 dark:border-accent-800 dark:bg-accent-900/20">
+                  <p className="text-xs text-surface-500 mb-1">Disbursed by</p>
+                  <p className="text-sm font-medium">{selectedCashReq.disbursed_by_user.first_name} {selectedCashReq.disbursed_by_user.last_name}</p>
+                  {selectedCashReq.disbursed_at && <p className="text-xs text-surface-400">{formatDateTime(selectedCashReq.disbursed_at)}</p>}
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              {selectedCashReq.status === 'pending' && isApprover(user) && (
+                <div className="flex gap-3 pt-2">
+                  <button onClick={() => handleApproveCashRequest(selectedCashReq.id)} disabled={cashReqActionLoading} className="btn-primary flex-1">
+                    <CheckCircle2 size={14} className="mr-1" /> Approve
+                  </button>
+                  <button onClick={() => { setRejectTargetId(selectedCashReq.id); setShowRejectModal(true); }} disabled={cashReqActionLoading} className="btn-danger flex-1">
+                    <XCircle size={14} className="mr-1" /> Reject
+                  </button>
+                </div>
+              )}
+
+              {selectedCashReq.status === 'approved' && isApprover(user) && (
+                <button onClick={() => handleDisburseCashRequest(selectedCashReq.id)} disabled={cashReqActionLoading} className="btn-primary w-full">
+                  <Banknote size={14} className="mr-1" /> Mark as Disbursed
+                </button>
+              )}
+
+              {selectedCashReq.status === 'pending' && selectedCashReq.requested_by === user?.id && !isApprover(user) && (
+                <button onClick={() => { if (confirm('Cancel this cash request?')) { dataService.cancelCashRequest(selectedCashReq.id).then(() => { toast.success('Request cancelled'); setShowCashReqDetail(false); fetchCashRequests(); fetchCashReqSummary(); }).catch(() => toast.error('Failed to cancel')); } }} className="btn-secondary w-full">
+                  <Ban size={14} className="mr-1" /> Cancel Request
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== CREATE CASH REQUEST MODAL ===== */}
+      {showCashReqModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl dark:bg-surface-800">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold">Request Cash</h2>
+              <button onClick={() => setShowCashReqModal(false)} className="rounded-lg p-2 text-surface-400 hover:bg-surface-100"><X size={20} /></button>
+            </div>
+            <form onSubmit={handleCreateCashRequest} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Amount (TZS) *</label>
+                  <input type="number" className="input" value={cashReqForm.amount || ''} onChange={e => setCashReqForm({...cashReqForm, amount: Number(e.target.value)})} min={1} required />
+                </div>
+                <div>
+                  <label className="label">Category</label>
+                  <select className="input" value={cashReqForm.category} onChange={e => setCashReqForm({...cashReqForm, category: e.target.value})}>
+                    {cashReqCategories.map(c => <option key={c} value={c}>{getStatusLabel(c)}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="label">Purpose *</label>
+                <textarea className="input" rows={3} value={cashReqForm.purpose} onChange={e => setCashReqForm({...cashReqForm, purpose: e.target.value})} placeholder="Explain why you need this cash..." required />
+              </div>
+              <div>
+                <label className="label">Preferred Payment Method</label>
+                <select className="input" value={cashReqForm.payment_method} onChange={e => setCashReqForm({...cashReqForm, payment_method: e.target.value})}>
+                  {paymentMethods.map(m => <option key={m} value={m}>{paymentMethodLabels[m]}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label">Additional Notes</label>
+                <textarea className="input" rows={2} value={cashReqForm.notes} onChange={e => setCashReqForm({...cashReqForm, notes: e.target.value})} placeholder="Any additional information..." />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setShowCashReqModal(false)} className="btn-secondary">Cancel</button>
+                <button type="submit" className="btn-primary"><Banknote size={14} className="mr-1" /> Submit Request</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===== REJECT REASON MODAL ===== */}
+      {showRejectModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-surface-800">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Reject Cash Request</h2>
+              <button onClick={() => { setShowRejectModal(false); setRejectReason(''); }} className="rounded-lg p-2 text-surface-400 hover:bg-surface-100"><X size={20} /></button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="label">Rejection Reason *</label>
+                <textarea className="input" rows={3} value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Explain why this request is being rejected..." required />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button onClick={() => { setShowRejectModal(false); setRejectReason(''); }} className="btn-secondary">Cancel</button>
+                <button onClick={handleRejectCashRequest} disabled={!rejectReason || cashReqActionLoading} className="btn-danger">
+                  <XCircle size={14} className="mr-1" /> Reject Request
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

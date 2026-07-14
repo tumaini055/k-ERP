@@ -16,17 +16,7 @@ async function computeProjectRevenue(): Promise<number> {
 
   let total = 0;
   for (const p of completed) {
-    if (p.recorded_revenue) {
-      total += Number(p.recorded_revenue);
-    } else {
-      // Fallback: compute net profit from expenses
-      const { data: exps } = await supabase
-        .from('expenses')
-        .select('amount')
-        .eq('project_id', p.id);
-      const totalExp = exps?.reduce((s: number, e: any) => s + Number(e.amount), 0) || 0;
-      total += Math.max(0, Number(p.budget || 0) - totalExp);
-    }
+    total += Number(p.recorded_revenue || p.budget || 0);
   }
   return total;
 }
@@ -59,9 +49,9 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
       applyCompanyFilter(supabase.from('support_tickets').select('*', { count: 'exact', head: true })).eq('status', 'open'),
       applyCompanyFilter(supabase.from('users').select('*', { count: 'exact', head: true })).neq('role', 'customer'),
       applyCompanyFilter(supabase.from('projects').select('status')),
-      supabase.from('payments').select('amount').gte('payment_date', new Date(new Date().getFullYear(), 0, 1).toISOString()),
-      supabase.from('audit_logs').select('*, user:users(first_name, last_name)').order('created_at', { ascending: false }).limit(10),
-      supabase.from('payments').select('amount, payment_date'),
+      applyCompanyFilter(supabase.from('payments').select('amount').gte('payment_date', new Date(new Date().getFullYear(), 0, 1).toISOString())),
+      supabase.from('audit_logs').select('*, user:users!audit_logs_user_id_fkey(first_name, last_name)').order('created_at', { ascending: false }).limit(10),
+      applyCompanyFilter(supabase.from('payments').select('amount, payment_date')),
     ]);
 
     const totalRevenue = revenueData?.reduce((sum: number, p: any) => sum + Number(p.amount), 0) || 0;
@@ -90,7 +80,7 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
       open_tickets: openTickets || 0,
       total_employees: totalEmployees || 0,
       project_statuses: statusCounts,
-      total_revenue: totalRevenue + projectRevenue,
+      total_revenue: totalRevenue,
       project_revenue: projectRevenue,
       monthly_revenue: monthlyRevenueArray,
       recent_activities: recentActivities || [],
@@ -105,11 +95,19 @@ router.get('/financial-summary', async (req: AuthRequest, res: Response) => {
     const currentYear = new Date().getFullYear();
     const startOfYear = new Date(currentYear, 0, 1).toISOString();
     const endOfYear = new Date(currentYear, 11, 31).toISOString();
+    const companyId = req.user!.company_id;
+    const isSuperAdmin = req.user!.role === 'super_admin';
+    const hasCompany = !!(companyId);
+
+    const applyCompanyFilter = (query: any) => {
+      if (!isSuperAdmin && hasCompany) return query.eq('company_id', companyId);
+      return query;
+    };
 
     const [{ data: revenue }, { data: expenses }, { data: invoices }] = await Promise.all([
-      supabase.from('payments').select('amount').gte('payment_date', startOfYear).lte('payment_date', endOfYear),
-      supabase.from('expenses').select('amount').gte('expense_date', startOfYear).lte('expense_date', endOfYear),
-      supabase.from('invoices').select('total_amount, status').in('status', ['sent', 'overdue']),
+      applyCompanyFilter(supabase.from('payments').select('amount').gte('payment_date', startOfYear).lte('payment_date', endOfYear)),
+      applyCompanyFilter(supabase.from('expenses').select('amount').gte('expense_date', startOfYear).lte('expense_date', endOfYear)),
+      applyCompanyFilter(supabase.from('invoices').select('total_amount, status').in('status', ['sent', 'overdue'])),
     ]);
 
     const totalRevenue = revenue?.reduce((s: number, r: any) => s + Number(r.amount), 0) || 0;
@@ -118,9 +116,9 @@ router.get('/financial-summary', async (req: AuthRequest, res: Response) => {
     const projectRevenueTotal = await computeProjectRevenue();
 
     res.json({
-      total_revenue: totalRevenue + projectRevenueTotal,
+      total_revenue: totalRevenue,
       total_expenses: totalExpenses,
-      net_profit: (totalRevenue + projectRevenueTotal) - totalExpenses,
+      net_profit: totalRevenue - totalExpenses,
       outstanding_invoices: outstandingInvoices,
       project_revenue: projectRevenueTotal,
     });

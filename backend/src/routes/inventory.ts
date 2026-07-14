@@ -157,7 +157,7 @@ router.get('/transactions', checkPermission('inventory', 'canView'), async (req:
     const { product_id, type, page = 1, limit = 20 } = req.query;
     let query = supabase
       .from('inventory_transactions')
-      .select('*, product:products(name, sku), user:users(first_name, last_name)', { count: 'exact' });
+      .select('*, product:products(name, sku), user:users!inventory_transactions_performed_by_fkey(first_name, last_name)', { count: 'exact' });
 
     if (product_id) query = query.eq('product_id', product_id);
     if (type) query = query.eq('type', type);

@@ -395,3 +395,28 @@ export interface DocumentVersion {
   uploader?: Partial<User>;
   created_at: string;
 }
+
+export interface CashRequest {
+  id: string;
+  company_id?: string;
+  reference_number: string;
+  requested_by: string;
+  amount: number;
+  purpose: string;
+  category: string;
+  payment_method: string;
+  status: CashRequestStatus;
+  approved_by?: string;
+  approved_at?: string;
+  rejection_reason?: string;
+  disbursed_at?: string;
+  disbursed_by?: string;
+  notes?: string;
+  requested_by_user?: { first_name: string; last_name: string; email?: string; phone?: string };
+  approved_by_user?: { first_name: string; last_name: string };
+  disbursed_by_user?: { first_name: string; last_name: string };
+  created_at: string;
+  updated_at?: string;
+}
+
+export type CashRequestStatus = 'pending' | 'approved' | 'rejected' | 'disbursed' | 'cancelled';

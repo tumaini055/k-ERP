@@ -12,7 +12,7 @@ router.get('/', checkPermission('projects', 'canView'), async (req: AuthRequest,
     const { status, category, page = 1, limit = 10 } = req.query;
     let query = supabase
       .from('projects')
-      .select('*, customer:customers(company_name, contact_person), manager:users(first_name, last_name)', { count: 'exact' });
+      .select('*, customer:customers!projects_customer_id_fkey(company_name, contact_person), manager:users!projects_manager_id_fkey(first_name, last_name)', { count: 'exact' });
 
     if (status) query = query.eq('status', status);
     if (category) query = query.eq('category', category);
@@ -42,7 +42,7 @@ router.get('/:id', checkPermission('projects', 'canView'), async (req: AuthReque
   try {
     const { data, error } = await supabase
       .from('projects')
-      .select('*, customer:customers(*), manager:users(first_name, last_name, email, phone), milestones:project_milestones(*), tasks:project_tasks(*), documents:project_documents(*)')
+      .select('*, customer:customers!projects_customer_id_fkey(*), manager:users!projects_manager_id_fkey(first_name, last_name, email, phone), milestones:project_milestones(*), tasks:project_tasks(*), documents:project_documents(*)')
       .eq('id', req.params.id)
       .single();
 
@@ -158,7 +158,7 @@ router.get('/:id/tasks', checkPermission('projects', 'canView'), async (req: Aut
   try {
     const { data, error } = await supabase
       .from('project_tasks')
-      .select('*, assignee:users(first_name, last_name)')
+      .select('*, assignee:users!project_tasks_assigned_to_fkey(first_name, last_name)')
       .eq('project_id', req.params.id)
       .order('sort_order', { ascending: true });
 
@@ -276,7 +276,7 @@ router.get('/:id/time-entries', checkPermission('projects', 'canView'), async (r
   try {
     const { data, error } = await supabase
       .from('time_entries')
-      .select('*, user:users(first_name, last_name), task:project_tasks(title)')
+      .select('*, user:users!time_entries_user_id_fkey(first_name, last_name), task:project_tasks(title)')
       .eq('project_id', req.params.id)
       .order('date', { ascending: false });
 
@@ -292,7 +292,7 @@ router.post('/time-entries', checkPermission('projects', 'canCreate'), async (re
     const { data, error } = await supabase
       .from('time_entries')
       .insert({ ...req.body, user_id: req.user!.id })
-      .select('*, user:users(first_name, last_name)')
+      .select('*, user:users!time_entries_user_id_fkey(first_name, last_name)')
       .single();
 
     if (error) throw error;
@@ -425,7 +425,7 @@ router.get('/:id/invoices', checkPermission('projects', 'canView'), async (req: 
   try {
     const { data, error } = await supabase
       .from('invoices')
-      .select('*, customer:customers(company_name, contact_person), payments:payments(*)')
+      .select('*, customer:customers!invoices_customer_id_fkey(company_name, contact_person), payments:payments(*)')
       .eq('project_id', req.params.id)
       .order('created_at', { ascending: false });
 
@@ -527,7 +527,7 @@ router.get('/:id/financials', checkPermission('projects', 'canView'), async (req
 router.get('/:id/report', checkPermission('projects', 'canView'), async (req: AuthRequest, res: Response) => {
   try {
     const [projectRes, expensesRes, tasksRes] = await Promise.all([
-      supabase.from('projects').select('*, customer:customers(*), manager:users(first_name, last_name, email)').eq('id', req.params.id).single(),
+      supabase.from('projects').select('*, customer:customers!projects_customer_id_fkey(*), manager:users!projects_manager_id_fkey(first_name, last_name, email)').eq('id', req.params.id).single(),
       supabase.from('expenses').select('*').eq('project_id', req.params.id).order('expense_date', { ascending: false }),
       supabase.from('project_tasks').select('*').eq('project_id', req.params.id),
     ]);

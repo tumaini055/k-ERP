@@ -182,13 +182,13 @@ export default function Dashboard() {
                 <p className="text-xs font-medium text-surface-500 mb-2">Revenue Breakdown</p>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-surface-600 dark:text-surface-400">Payments Received</span>
+                    <span className="text-surface-600 dark:text-surface-400">Payments Received (Actual)</span>
                     <span className="font-medium text-surface-900 dark:text-surface-50">
-                      {formatCurrency(financial.total_revenue - (financial.project_revenue || 0))}
+                      {formatCurrency(financial.total_revenue)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-surface-600 dark:text-surface-400">Completed Project Revenue</span>
+                    <span className="text-surface-600 dark:text-surface-400">Completed Project Value</span>
                     <span className="font-medium text-accent-600">{formatCurrency(financial.project_revenue || 0)}</span>
                   </div>
                 </div>

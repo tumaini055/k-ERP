@@ -11,7 +11,7 @@ router.get('/', checkPermission('crm', 'canView'), async (req: AuthRequest, res:
     const { status, source, page = 1, limit = 10 } = req.query;
     let query = supabase
       .from('leads')
-      .select('*, customer:customers(company_name, contact_person), assignee:users(first_name, last_name)', { count: 'exact' });
+      .select('*, customer:customers!leads_customer_id_fkey(company_name, contact_person), assignee:users!leads_assigned_to_fkey(first_name, last_name)', { count: 'exact' });
 
     if (status) query = query.eq('status', status);
     if (source) query = query.eq('source', source);
@@ -62,7 +62,7 @@ router.get('/:id', checkPermission('crm', 'canView'), async (req: AuthRequest, r
   try {
     const { data, error } = await supabase
       .from('leads')
-      .select('*, customer:customers(*), assignee:users(first_name, last_name, email)')
+      .select('*, customer:customers!leads_customer_id_fkey(*), assignee:users!leads_assigned_to_fkey(first_name, last_name, email)')
       .eq('id', req.params.id)
       .single();
 
@@ -81,7 +81,7 @@ router.post('/', checkPermission('crm', 'canCreate'), async (req: AuthRequest, r
     const { data, error } = await supabase
       .from('leads')
       .insert({ ...req.body, company_id: req.user!.company_id })
-      .select('*, customer:customers(company_name, contact_person), assignee:users(first_name, last_name)')
+      .select('*, customer:customers!leads_customer_id_fkey(company_name, contact_person), assignee:users!leads_assigned_to_fkey(first_name, last_name)')
       .single();
 
     if (error) throw error;
@@ -102,7 +102,7 @@ router.put('/:id', checkPermission('crm', 'canEdit'), async (req: AuthRequest, r
       .from('leads')
       .update(updateData)
       .eq('id', req.params.id)
-      .select('*, customer:customers(company_name, contact_person), assignee:users(first_name, last_name)')
+      .select('*, customer:customers!leads_customer_id_fkey(company_name, contact_person), assignee:users!leads_assigned_to_fkey(first_name, last_name)')
       .single();
 
     if (error) throw error;

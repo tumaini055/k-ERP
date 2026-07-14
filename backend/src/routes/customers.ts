@@ -12,10 +12,12 @@ router.get('/', checkPermission('crm', 'canView'), async (req: AuthRequest, res:
     const { search, status, page = 1, limit = 10 } = req.query;
     let query = supabase
       .from('customers')
-      .select('*, user:users(first_name, last_name, email)', { count: 'exact' });
+      .select('*', { count: 'exact' });
 
-    if (req.user!.role !== 'super_admin' && req.user!.company_id) {
-      query = query.eq('company_id', req.user!.company_id);
+    if (req.user!.role !== 'super_admin' && req.user!.role !== 'ceo' && req.user!.role !== 'managing_director') {
+      if (req.user!.company_id) {
+        query = query.eq('company_id', req.user!.company_id);
+      }
     }
 
     if (search) {
@@ -53,7 +55,7 @@ router.get('/:id', checkPermission('crm', 'canView'), async (req: AuthRequest, r
   try {
     const { data: customer, error } = await supabase
       .from('customers')
-      .select('*, user:users(first_name, last_name, email), contacts:customer_contacts(*), documents:customer_documents(*)')
+      .select('*, user:users!customers_user_id_fkey(first_name, last_name, email), contacts:customer_contacts(*), documents:customer_documents(*)')
       .eq('id', req.params.id)
       .single();
 
