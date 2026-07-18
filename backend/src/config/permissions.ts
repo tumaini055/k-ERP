@@ -62,6 +62,7 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
   ],
   accountant: [
     { module: 'dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'projects', canView: true, canCreate: false, canEdit: false, canDelete: false },
     { module: 'finance', canView: true, canCreate: true, canEdit: true, canDelete: false },
     { module: 'inventory', canView: true, canCreate: false, canEdit: false, canDelete: false },
     { module: 'contracts', canView: true, canCreate: false, canEdit: false, canDelete: false },
