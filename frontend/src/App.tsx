@@ -19,6 +19,7 @@ import Attendance from './pages/Attendance';
 import Organization from './pages/Organization';
 import Settings from './pages/Settings';
 import Profile from './pages/Profile';
+import OfficialLetters from './pages/OfficialLetters';
 
 export default function App() {
   return (
@@ -51,6 +52,7 @@ export default function App() {
             <Route path="reports" element={<Reports />} />
             <Route path="settings" element={<Settings />} />
             <Route path="profile" element={<Profile />} />
+            <Route path="letters" element={<OfficialLetters />} />
           </Route>
         </Routes>
       </AuthProvider>

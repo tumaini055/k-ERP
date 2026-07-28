@@ -249,6 +249,7 @@ export interface ISPBilling {
   amount: number;
   paid_amount: number;
   status: string;
+  description?: string;
   paid_at?: string;
   subscriber?: { subscriber_code: string; customer?: { company_name?: string } };
   created_at: string;

@@ -26,6 +26,7 @@ import settingsRoutes from './routes/settings';
 import attendanceRoutes from './routes/attendance';
 import companyStructureRoutes from './routes/company-structure';
 import notificationRoutes from './routes/notifications';
+import letterRoutes from './routes/letters';
 import supabase from './config/supabase';
 
 const app = express();
@@ -83,6 +84,7 @@ app.use(`${apiPrefix}/settings`, settingsRoutes);
 app.use(`${apiPrefix}/attendance`, attendanceRoutes);
 app.use(`${apiPrefix}/company`, companyStructureRoutes);
 app.use(`${apiPrefix}/notifications`, notificationRoutes);
+app.use(`${apiPrefix}/letters`, letterRoutes);
 
 app.get(`${apiPrefix}/health`, (_req, res) => {
   res.json({

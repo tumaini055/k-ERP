@@ -323,9 +323,39 @@ export const dataService = {
     const { data } = await api.post('/isp/billing', body);
     return data;
   },
+  async updateISPBilling(id: string, body: any) {
+    const { data } = await api.put(`/isp/billing/${id}`, body);
+    return data;
+  },
   async payISPBilling(id: string, body?: any) {
     const { data } = await api.put(`/isp/billing/${id}/pay`, body || {});
     return data;
+  },
+  async downloadISPBillingPdf(billingId: string) {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/isp/billing/${billingId}/pdf`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || `Download failed: ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const contentDisp = res.headers.get('content-disposition');
+      const match = contentDisp?.match(/filename="(.+?)"/);
+      a.download = match ? match[1] : `isp-invoice-${billingId.slice(0, 8)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('PDF download failed:', err);
+      throw err;
+    }
   },
 
   // Contracts
@@ -711,5 +741,50 @@ export const dataService = {
   async markAllNotificationsRead() {
     const { data } = await api.put('/notifications/read-all');
     return data;
+  },
+
+  // Official Letters
+  async generateOfficialLetter(body: {
+    subject?: string;
+    content: string;
+    reference_number?: string;
+    customer_id?: string;
+    recipient?: {
+      company_name?: string;
+      contact_person?: string;
+      address?: string;
+      city?: string;
+      region?: string;
+    };
+  }) {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/letters/generate', {
+        method: 'POST',
+        headers: {
+          'Authorization': token ? `Bearer ${token}` : '',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || `Generation failed: ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const contentDisp = res.headers.get('content-disposition');
+      const match = contentDisp?.match(/filename="(.+?)"/);
+      a.download = match ? match[1] : `official-letter-${Date.now()}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Letter PDF generation failed:', err);
+      throw err;
+    }
   },
 };

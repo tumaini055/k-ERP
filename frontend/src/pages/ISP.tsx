@@ -5,7 +5,7 @@ import { ISPSubscriber, ISPPackage, ISPBilling } from '../types';
 import { formatDate, formatCurrency, formatDateTime, getStatusLabel } from '../lib/utils';
 import {
   Wifi, Plus, Users, Signal, DollarSign, Search, X, RefreshCw,
-  Home, Building2, Globe, CheckCircle2, CreditCard,
+  Home, Building2, Globe, CheckCircle2, CreditCard, Download,
 } from 'lucide-react';
 
 const typeIcons: Record<string, any> = { home: Home, business: Building2, enterprise: Globe };
@@ -60,11 +60,14 @@ export default function ISP() {
   });
 
   const [showBillingModal, setShowBillingModal] = useState(false);
-  const [billForm, setBillForm] = useState({ amount: 0, billing_date: '', due_date: '' });
+  const [billForm, setBillForm] = useState({ amount: 0, billing_date: '', due_date: '', description: '' });
 
   const [showPayModal, setShowPayModal] = useState(false);
   const [payingBill, setPayingBill] = useState<ISPBilling | null>(null);
   const [payAmount, setPayAmount] = useState(0);
+
+  const [editingBillId, setEditingBillId] = useState<string | null>(null);
+  const [editDescription, setEditDescription] = useState('');
 
   const [customers, setCustomers] = useState<any[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -194,12 +197,22 @@ export default function ISP() {
         amount: billForm.amount,
         billing_date: billForm.billing_date || new Date().toISOString().split('T')[0],
         due_date: billForm.due_date || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+        description: billForm.description || undefined,
       });
       toast.success('Invoice created');
       setShowBillingModal(false);
-      setBillForm({ amount: 0, billing_date: '', due_date: '' });
+      setBillForm({ amount: 0, billing_date: '', due_date: '', description: '' });
       loadBilling(selectedSub.id);
     } catch (error) { toast.error('Failed to create invoice'); }
+  };
+
+  const handleUpdateDescription = async (billId: string) => {
+    try {
+      await dataService.updateISPBilling(billId, { description: editDescription });
+      toast.success('Description updated');
+      setEditingBillId(null);
+      if (selectedSub) loadBilling(selectedSub.id);
+    } catch (error) { toast.error('Failed to update description'); }
   };
 
   const handlePayBill = async () => {
@@ -373,7 +386,7 @@ export default function ISP() {
                         {serviceStatuses.map(s => <option key={s} value={s}>{getStatusLabel(s)}</option>)}
                       </select>
                     </div>
-                    <button onClick={() => { setBillForm({ amount: sd.package?.price || 0, billing_date: new Date().toISOString().split('T')[0], due_date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0] }); setShowBillingModal(true); }} className="btn-primary text-xs py-1.5 px-3">
+                    <button onClick={() => { setBillForm({ amount: sd.package?.price || 0, billing_date: new Date().toISOString().split('T')[0], due_date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0], description: '' }); setShowBillingModal(true); }} className="btn-primary text-xs py-1.5 px-3">
                       <CreditCard size={14} className="mr-1" /> Create Invoice
                     </button>
                   </div>
@@ -419,7 +432,7 @@ export default function ISP() {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-medium text-surface-700 dark:text-surface-300">Billing History</p>
-                    <button onClick={() => { setBillForm({ amount: sd.package?.price || 0, billing_date: new Date().toISOString().split('T')[0], due_date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0] }); setShowBillingModal(true); }} className="btn-primary text-xs py-1.5 px-3">
+                    <button onClick={() => { setBillForm({ amount: sd.package?.price || 0, billing_date: new Date().toISOString().split('T')[0], due_date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0], description: '' }); setShowBillingModal(true); }} className="btn-primary text-xs py-1.5 px-3">
                       <Plus size={14} className="mr-1" /> New Invoice
                     </button>
                   </div>
@@ -448,9 +461,10 @@ export default function ISP() {
                       {subBilling.map((bill: ISPBilling) => {
                         const outstanding = Number(bill.amount) - Number(bill.paid_amount);
                         return (
+                          <>
                           <div key={bill.id} className="rounded-lg border border-surface-200 p-3 dark:border-surface-700">
                             <div className="flex items-start justify-between">
-                              <div>
+                              <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
                                   <span className="text-sm font-medium">{formatCurrency(bill.amount)}</span>
                                   <span className={billStatusColors[bill.status]}>{getStatusLabel(bill.status)}</span>
@@ -462,14 +476,42 @@ export default function ISP() {
                                   <p className="text-xs text-accent-600">Paid: {formatCurrency(bill.paid_amount)}{bill.paid_at ? ` on ${formatDate(bill.paid_at)}` : ''}</p>
                                 )}
                                 {outstanding > 0 && <p className="text-xs text-red-500">Outstanding: {formatCurrency(outstanding)}</p>}
+                                {bill.description && editingBillId !== bill.id && (
+                                  <p className="text-xs text-surface-600 mt-1 italic">"{bill.description}"</p>
+                                )}
                               </div>
-                              {bill.status !== 'paid' && (
-                                <button onClick={() => { setPayingBill(bill); setPayAmount(outstanding); setShowPayModal(true); }} className="btn-primary text-xs py-1 px-2">
-                                  <CreditCard size={12} className="mr-1" />Pay
+                              <div className="flex gap-1">
+                                <button onClick={() => { setEditingBillId(bill.id); setEditDescription(bill.description || ''); }} className="btn-secondary text-xs py-1 px-2" title="Edit description">
+                                  <span className="text-[10px]">Edit</span>
                                 </button>
-                              )}
+                                <button onClick={() => dataService.downloadISPBillingPdf(bill.id).catch(() => toast.error('Failed to download PDF'))} className="btn-secondary text-xs py-1 px-2">
+                                  <Download size={12} />
+                                </button>
+                                {bill.status !== 'paid' && (
+                                  <button onClick={() => { setPayingBill(bill); setPayAmount(outstanding); setShowPayModal(true); }} className="btn-primary text-xs py-1 px-2">
+                                    <CreditCard size={12} className="mr-1" />Pay
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           </div>
+                          {editingBillId === bill.id && (
+                            <div className="mt-2 rounded-lg border border-accent-200 bg-accent-50 p-2 dark:border-accent-700 dark:bg-accent-900/20">
+                              <label className="text-xs font-medium text-surface-600 mb-1 block">Invoice Description</label>
+                              <textarea
+                                className="input text-xs w-full"
+                                rows={2}
+                                placeholder="e.g. Fiber Internet - Monthly Subscription"
+                                value={editDescription}
+                                onChange={e => setEditDescription(e.target.value)}
+                              />
+                              <div className="flex gap-2 mt-2">
+                                <button onClick={() => handleUpdateDescription(bill.id)} className="btn-primary text-xs py-1 px-3">Save</button>
+                                <button onClick={() => setEditingBillId(null)} className="btn-secondary text-xs py-1 px-3">Cancel</button>
+                              </div>
+                            </div>
+                          )}
+                          </>
                         );
                       })}
                     </div>
@@ -638,6 +680,10 @@ export default function ISP() {
                   <label className="label">Due Date</label>
                   <input type="date" className="input" value={billForm.due_date} onChange={e => setBillForm({...billForm, due_date: e.target.value})} />
                 </div>
+              </div>
+              <div>
+                <label className="label">Description (optional)</label>
+                <textarea className="input" rows={2} placeholder="Custom description for the invoice PDF" value={billForm.description} onChange={e => setBillForm({...billForm, description: e.target.value})} />
               </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button onClick={() => setShowBillingModal(false)} className="btn-secondary">Cancel</button>

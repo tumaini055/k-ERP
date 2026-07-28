@@ -540,6 +540,7 @@ CREATE TABLE IF NOT EXISTS isp_billing (
   amount DECIMAL(15,2) NOT NULL,
   paid_amount DECIMAL(15,2) DEFAULT 0,
   status VARCHAR(20) DEFAULT 'pending',
+  description TEXT,
   paid_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
