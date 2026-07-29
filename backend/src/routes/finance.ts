@@ -267,7 +267,7 @@ router.get('/invoices/:id/pdf', checkPermission('finance', 'canView'), async (re
         doc.text(`${currencySymbol}${itemTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}`, colX[4], y + 5, { width: colW[4], align: 'right' });
         y += rowH;
 
-        if (y > 690) {
+        if (y > 730) {
           doc.moveTo(colX[0], y).lineTo(colX[0] + tableWidth, y).strokeColor('#e5e7eb').lineWidth(0.5).stroke();
           doc.addPage();
           y = 45;
@@ -293,7 +293,6 @@ router.get('/invoices/:id/pdf', checkPermission('finance', 'canView'), async (re
     const sumW = colW[3] + colW[4];
     const fmt = (n: number) => `${currencySymbol}${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 
-    doc.fontSize(9);
     const summaryRows: { label: string; value: string; bold?: boolean }[] = [];
     if (Number(invoice.subtotal) > 0) summaryRows.push({ label: 'Subtotal', value: fmt(invoice.subtotal) });
     if (Number(invoice.tax_rate) > 0) summaryRows.push({ label: `Tax (${invoice.tax_rate}%)`, value: fmt(invoice.tax_amount) });
@@ -302,6 +301,12 @@ router.get('/invoices/:id/pdf', checkPermission('finance', 'canView'), async (re
     const summaryH = summaryRows.length * 16;
     const grandBoxH = 30;
     const totalSummaryH = summaryH + grandBoxH + 6;
+
+    // Check if there's room for remaining content (summary + terms + bank + prepared by + footer)
+    if (y + totalSummaryH + 230 > doc.page.height - 45) {
+      doc.addPage();
+      y = 45;
+    }
 
     // Background box for summary
     doc.rect(sumX, y, sumW, totalSummaryH).fill('#f9fafb');
@@ -378,7 +383,12 @@ router.get('/invoices/:id/pdf', checkPermission('finance', 'canView'), async (re
     // ============================================
     // FOOTER
     // ============================================
-    const footY = doc.page.height - 32;
+    y += 20;
+    if (y + 32 > doc.page.height - 45) {
+      doc.addPage();
+      y = 45;
+    }
+    const footY = y;
     doc.rect(0, footY - 6, doc.page.width, 32).fill('#dc2626');
     doc.fillColor('#fff').fontSize(7.5).font('Helvetica');
     const footerParts = [companyName];

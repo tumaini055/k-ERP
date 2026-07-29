@@ -331,6 +331,14 @@ export const dataService = {
     const { data } = await api.put(`/isp/billing/${id}/pay`, body || {});
     return data;
   },
+  async getISPSubscriptions(params?: any) {
+    const { data } = await api.get('/isp/subscriptions', { params });
+    return data;
+  },
+  async getISPStats() {
+    const { data } = await api.get('/isp/stats');
+    return data;
+  },
   async downloadISPBillingPdf(billingId: string) {
     try {
       const token = localStorage.getItem('token');

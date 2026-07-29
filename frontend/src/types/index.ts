@@ -219,6 +219,7 @@ export interface ISPPackage {
   bandwidth_upload: number;
   bandwidth_unit: string;
   price: number;
+  cost_price?: number;
   setup_fee: number;
   billing_cycle: string;
   is_active: boolean;

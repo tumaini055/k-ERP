@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { dataService } from '../services/dataService';
 import { ISPSubscriber, ISPPackage, ISPBilling } from '../types';
-import { formatDate, formatCurrency, formatDateTime, getStatusLabel } from '../lib/utils';
+import { formatDate, formatCurrency, formatCurrencyFull, formatDateTime, getStatusLabel } from '../lib/utils';
 import {
   Wifi, Plus, Users, Signal, DollarSign, Search, X, RefreshCw,
-  Home, Building2, Globe, CheckCircle2, CreditCard, Download,
+  Home, Building2, Globe, CheckCircle2, CreditCard, Download, Calendar, TrendingUp,
 } from 'lucide-react';
 
 const typeIcons: Record<string, any> = { home: Home, business: Building2, enterprise: Globe };
@@ -49,7 +49,7 @@ export default function ISP() {
   const [pkgForm, setPkgForm] = useState({
     name: '', type: 'home' as 'home' | 'business' | 'enterprise',
     bandwidth_download: 0, bandwidth_upload: 0, bandwidth_unit: 'Mbps',
-    price: 0, setup_fee: 0, billing_cycle: 'monthly', description: '',
+    price: 0, cost_price: 0, setup_fee: 0, billing_cycle: 'monthly', description: '',
   });
 
   const [showSubModal, setShowSubModal] = useState(false);
@@ -60,7 +60,7 @@ export default function ISP() {
   });
 
   const [showBillingModal, setShowBillingModal] = useState(false);
-  const [billForm, setBillForm] = useState({ amount: 0, billing_date: '', due_date: '', description: '' });
+  const [billForm, setBillForm] = useState({ amount: 0, billing_date: '', due_date: '', description: '', months: 1 });
 
   const [showPayModal, setShowPayModal] = useState(false);
   const [payingBill, setPayingBill] = useState<ISPBilling | null>(null);
@@ -69,8 +69,17 @@ export default function ISP() {
   const [editingBillId, setEditingBillId] = useState<string | null>(null);
   const [editDescription, setEditDescription] = useState('');
 
+  const [subscriptions, setSubscriptions] = useState<any[]>([]);
+  const [subsLoading, setSubsLoading] = useState(false);
+  const [subsFilter, setSubsFilter] = useState('30');
+
+  const [stats, setStats] = useState<any>(null);
+
   const [customers, setCustomers] = useState<any[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [customerSubs, setCustomerSubs] = useState<any[]>([]);
+  const [showQuickCustomer, setShowQuickCustomer] = useState(false);
+  const [quickCustForm, setQuickCustForm] = useState({ company_name: '', contact_person: '', phone: '', email: '', address: '' });
 
   useEffect(() => {
     const params: any = { limit: 100 };
@@ -79,6 +88,7 @@ export default function ISP() {
     if (pkgFilter) params.package_id = pkgFilter;
     loadData(params);
     loadPackages();
+    loadStats();
   }, [search, statusFilter, pkgFilter]);
 
   const loadData = async (params?: any) => {
@@ -97,6 +107,13 @@ export default function ISP() {
     } catch (error) {}
   };
 
+  const loadStats = async () => {
+    try {
+      const res = await dataService.getISPStats();
+      setStats(res.data || null);
+    } catch (error) {}
+  };
+
   const loadBilling = async (subId: string) => {
     setBillingLoading(true);
     try {
@@ -106,8 +123,38 @@ export default function ISP() {
     setBillingLoading(false);
   };
 
+  const loadSubscriptions = async (days?: string) => {
+    setSubsLoading(true);
+    try {
+      const params: any = {};
+      if (days && days !== 'all') params.ending_within_days = days;
+      const res = await dataService.getISPSubscriptions(params);
+      setSubscriptions(res.data || []);
+    } catch (error) { setSubscriptions([]); }
+    setSubsLoading(false);
+  };
+
+  useEffect(() => { loadSubscriptions(subsFilter); }, [subsFilter]);
+
+  const subEndColor = (days: number) => {
+    if (days < 0) return 'text-red-600 bg-red-50 dark:bg-red-900/20 dark:text-red-400 ring-red-200 dark:ring-red-800';
+    if (days <= 7) return 'text-orange-600 bg-orange-50 dark:bg-orange-900/20 dark:text-orange-400 ring-orange-200 dark:ring-orange-800';
+    if (days <= 30) return 'text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20 dark:text-yellow-400 ring-yellow-200 dark:ring-yellow-800';
+    return 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-400 ring-emerald-200 dark:ring-emerald-800';
+  };
+
+  const customerSubCount: Record<string, number> = {};
+  for (const sub of subscribers) {
+    if (sub.customer_id) customerSubCount[sub.customer_id] = (customerSubCount[sub.customer_id] || 0) + 1;
+  }
+
   const totalMonthlyRevenue = subscribers.reduce((s, sub) => {
     if (sub.service_status === 'active' && sub.package) return s + Number(sub.package.price);
+    return s;
+  }, 0);
+
+  const totalMonthlyCost = subscribers.reduce((s, sub) => {
+    if (sub.service_status === 'active' && sub.package) return s + Number((sub.package as any).cost_price || 0);
     return s;
   }, 0);
 
@@ -126,7 +173,7 @@ export default function ISP() {
 
   const openAddPkg = () => {
     setEditingPkg(null);
-    setPkgForm({ name: '', type: 'home', bandwidth_download: 0, bandwidth_upload: 0, bandwidth_unit: 'Mbps', price: 0, setup_fee: 0, billing_cycle: 'monthly', description: '' });
+    setPkgForm({ name: '', type: 'home', bandwidth_download: 0, bandwidth_upload: 0, bandwidth_unit: 'Mbps', price: 0, cost_price: 0, setup_fee: 0, billing_cycle: 'monthly', description: '' });
     setShowPkgModal(true);
   };
 
@@ -135,7 +182,7 @@ export default function ISP() {
     setPkgForm({
       name: pkg.name, type: pkg.type,
       bandwidth_download: pkg.bandwidth_download, bandwidth_upload: pkg.bandwidth_upload,
-      bandwidth_unit: pkg.bandwidth_unit, price: pkg.price, setup_fee: pkg.setup_fee,
+      bandwidth_unit: pkg.bandwidth_unit, price: pkg.price, cost_price: pkg.cost_price || 0, setup_fee: pkg.setup_fee,
       billing_cycle: pkg.billing_cycle, description: (pkg as any).description || '',
     });
     setShowPkgModal(true);
@@ -153,6 +200,7 @@ export default function ISP() {
       }
       setShowPkgModal(false);
       loadPackages();
+      loadStats();
     } catch (error) { toast.error('Failed to save package'); }
   };
 
@@ -162,7 +210,16 @@ export default function ISP() {
       setCustomers(cRes.data || []);
     } catch (error) {}
     setSubForm({ customer_id: '', package_id: '', installation_address: '', connection_type: 'fiber', static_ip: '', notes: '', service_status: 'pending' });
+    setCustomerSubs([]);
     setShowSubModal(true);
+  };
+
+  const loadCustomerSubs = async (customerId: string) => {
+    if (!customerId) { setCustomerSubs([]); return; }
+    try {
+      const res = await dataService.getISPSubscribers({ customer_id: customerId, limit: 50 });
+      setCustomerSubs(res.data || []);
+    } catch (error) { setCustomerSubs([]); }
   };
 
   const handleSaveSub = async (e: React.FormEvent) => {
@@ -173,6 +230,7 @@ export default function ISP() {
       toast.success('Subscriber added');
       setShowSubModal(false);
       loadData();
+      loadStats();
     } catch (error) { toast.error('Failed to add subscriber'); }
     setSubmitting(false);
   };
@@ -182,6 +240,7 @@ export default function ISP() {
       await dataService.updateISPSubscriber(id, { service_status });
       toast.success(`Status changed to ${getStatusLabel(service_status)}`);
       loadData();
+      loadStats();
       if (selectedSub) {
         setSelectedSub({ ...selectedSub, service_status });
         setSubDetail({ ...subDetail, service_status });
@@ -201,8 +260,9 @@ export default function ISP() {
       });
       toast.success('Invoice created');
       setShowBillingModal(false);
-      setBillForm({ amount: 0, billing_date: '', due_date: '', description: '' });
+      setBillForm({ amount: 0, billing_date: '', due_date: '', description: '', months: 1 });
       loadBilling(selectedSub.id);
+      loadStats();
     } catch (error) { toast.error('Failed to create invoice'); }
   };
 
@@ -224,6 +284,7 @@ export default function ISP() {
       setPayingBill(null);
       setPayAmount(0);
       if (selectedSub) loadBilling(selectedSub.id);
+      loadStats();
     } catch (error) { toast.error('Failed to record payment'); }
   };
 
@@ -237,7 +298,7 @@ export default function ISP() {
           <p className="page-subtitle">Manage internet packages, subscribers, and billing</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => { loadData(); loadPackages(); }} className="btn-secondary">
+          <button onClick={() => { loadData(); loadPackages(); loadStats(); }} className="btn-secondary">
             <RefreshCw size={16} className="mr-1" /> Refresh
           </button>
           <button onClick={openAddPkg} className="btn-secondary">
@@ -249,22 +310,111 @@ export default function ISP() {
         </div>
       </div>
 
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-4">
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="stat-card">
           <div className="stat-icon shrink-0 bg-blue-100 text-blue-600"><Users size={22} /></div>
-          <div className="min-w-0 overflow-hidden"><p className="stat-value">{subscribers.length}</p><p className="stat-label">Total Subscribers</p></div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon shrink-0 bg-accent-100 text-accent-600"><Signal size={22} /></div>
-          <div className="min-w-0 overflow-hidden"><p className="stat-value">{packages.length}</p><p className="stat-label">Packages</p></div>
+          <div className="min-w-0 overflow-hidden"><p className="stat-value">{stats?.total_subscribers ?? subscribers.length}</p><p className="stat-label">Total Subscribers</p></div>
         </div>
         <div className="stat-card">
           <div className="stat-icon shrink-0 bg-yellow-100 text-yellow-600"><Wifi size={22} /></div>
-          <div className="min-w-0 overflow-hidden"><p className="stat-value">{subscribers.filter(s => s.service_status === 'active').length}</p><p className="stat-label">Active</p></div>
+          <div className="min-w-0 overflow-hidden"><p className="stat-value">{stats?.active_count ?? subscribers.filter(s => s.service_status === 'active').length}</p><p className="stat-label">Active</p></div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon shrink-0 bg-red-100 text-red-600"><Calendar size={22} /></div>
+          <div className="min-w-0 overflow-hidden"><p className="stat-value">{stats?.overdue_count ?? 0}</p><p className="stat-label">Overdue</p></div>
         </div>
         <div className="stat-card">
           <div className="stat-icon shrink-0 bg-purple-100 text-purple-600"><DollarSign size={22} /></div>
-          <div className="min-w-0 overflow-hidden"><p className="stat-value">{formatCurrency(totalMonthlyRevenue)}</p><p className="stat-label">Monthly Revenue</p></div>
+          <div className="min-w-0 overflow-hidden">
+            <p className="stat-value">{formatCurrencyFull(stats?.projected_revenue ?? 0)}</p>
+            <p className="stat-label">Est. Monthly Revenue {stats?.monthly_collected > 0 ? <span className="text-[10px] text-accent-500">({formatCurrency(stats.monthly_collected)} collected)</span> : ''}</p>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon shrink-0 bg-red-100 text-red-600"><TrendingUp size={22} className="rotate-180" /></div>
+          <div className="min-w-0 overflow-hidden"><p className="stat-value">{formatCurrencyFull(stats?.projected_cost ?? 0)}</p><p className="stat-label">Est. Monthly Cost</p></div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon shrink-0 bg-emerald-100 text-emerald-600"><TrendingUp size={22} /></div>
+          <div className="min-w-0 overflow-hidden">
+            <p className="stat-value">{formatCurrencyFull(stats?.projected_profit ?? 0)}</p>
+            <p className="stat-label">Est. Monthly Profit {stats?.projected_revenue > 0 ? <span className="text-[10px]">({Math.round((stats.projected_profit / stats.projected_revenue) * 100)}%)</span> : ''}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Subscription End Dates */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300 flex items-center gap-2">
+            <Calendar size={16} className="text-primary-500" /> Subscription End Dates
+            {subsLoading && <RefreshCw size={14} className="animate-spin text-surface-400" />}
+          </h3>
+          <div className="flex items-center gap-2">
+            {[
+              { label: '7 Days', value: '7' },
+              { label: '30 Days', value: '30' },
+              { label: '90 Days', value: '90' },
+              { label: 'All', value: 'all' },
+            ].map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setSubsFilter(opt.value)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                  subsFilter === opt.value
+                    ? 'bg-primary-600 text-white shadow-sm'
+                    : 'bg-surface-100 text-surface-500 hover:bg-surface-200 dark:bg-surface-700 dark:text-surface-400 dark:hover:bg-surface-600'
+                }`}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="table-container">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Subscriber</th>
+                <th>Customer</th>
+                <th>Package</th>
+                <th>End Date</th>
+                <th>Days Left</th>
+                <th>Profit</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {subscriptions.length === 0 ? (
+                <tr><td colSpan={7} className="text-center py-8 text-surface-400 text-sm">{subsLoading ? 'Loading...' : 'No active subscriptions'}</td></tr>
+              ) : (
+                subscriptions.map((sub: any) => (
+                  <tr key={sub.id}>
+                    <td className="font-mono text-xs font-medium">{sub.subscriber_code}</td>
+                    <td className="font-medium text-sm">{sub.customer?.company_name || sub.customer?.contact_person || '-'}</td>
+                    <td className="text-sm">{sub.package?.name || '-'}</td>
+                    <td className="text-sm font-medium">{sub.end_date}</td>
+                    <td>
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${subEndColor(sub.days_remaining)}`}>
+                        {sub.days_remaining < 0 ? `${Math.abs(sub.days_remaining)}d overdue` : `${sub.days_remaining}d`}
+                      </span>
+                    </td>
+                    <td className="text-sm">
+                      {sub.package?.cost_price > 0 ? (
+                        <span className="text-emerald-600 font-medium">{formatCurrency(sub.package.price - sub.package.cost_price)}</span>
+                      ) : (
+                        <span className="text-surface-300">-</span>
+                      )}
+                    </td>
+                    <td>
+                      <span className={`badge-${sub.service_status === 'active' ? 'success' : 'warning'}`}>
+                        {sub.service_status === 'active' ? 'Active' : 'Pending'}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -285,7 +435,13 @@ export default function ISP() {
                   </div>
                   <p className="font-semibold text-surface-900 dark:text-surface-50">{pkg.name}</p>
                   <p className="text-2xl font-bold text-primary-600 mt-1">{formatCurrency(pkg.price)}<span className="text-xs font-normal text-surface-400">/{pkg.billing_cycle}</span></p>
-                  <div className="mt-3 flex items-center gap-2 text-xs text-surface-500">
+                  {(() => { const cp = pkg.cost_price || 0; return cp > 0 ? (
+                    <div className="mt-1.5 flex items-center gap-2 text-xs">
+                      <span className="text-surface-400">Cost: {formatCurrency(cp)}</span>
+                      <span className="text-emerald-600 font-medium">+{Math.round((1 - cp / pkg.price) * 100)}%</span>
+                    </div>
+                  ) : null; })()}
+                  <div className="mt-2 flex items-center gap-2 text-xs text-surface-500">
                     <Signal size={14} />
                     <span>{pkg.bandwidth_download}/{pkg.bandwidth_upload} {pkg.bandwidth_unit}</span>
                     {pkg.setup_fee > 0 && <span className="ml-auto">Setup: {formatCurrency(pkg.setup_fee)}</span>}
@@ -326,13 +482,14 @@ export default function ISP() {
               <th>Connection</th>
               <th>Status</th>
               <th>Since</th>
+              <th>Subs</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} className="text-center py-12"><RefreshCw size={20} className="mx-auto animate-spin text-surface-400" /></td></tr>
+              <tr><td colSpan={9} className="text-center py-12"><RefreshCw size={20} className="mx-auto animate-spin text-surface-400" /></td></tr>
             ) : subscribers.length === 0 ? (
-              <tr><td colSpan={8} className="text-center py-12 text-surface-400">No subscribers found</td></tr>
+              <tr><td colSpan={9} className="text-center py-12 text-surface-400">No subscribers found</td></tr>
             ) : (
               subscribers.map((sub) => (
                 <tr key={sub.id} className="cursor-pointer" onClick={() => openSubDetail(sub)}>
@@ -344,6 +501,13 @@ export default function ISP() {
                   <td className="text-xs capitalize">{sub.connection_type || '-'}</td>
                   <td><span className={statusColors[sub.service_status]}>{getStatusLabel(sub.service_status)}</span></td>
                   <td className="text-xs text-surface-400">{formatDate(sub.created_at)}</td>
+                  <td>
+                    {(sub.customer_id && (customerSubCount[sub.customer_id] || 0) > 1) ? (
+                      <span className="badge-info text-xs">{customerSubCount[sub.customer_id]}</span>
+                    ) : (
+                      <span className="text-surface-300">1</span>
+                    )}
+                  </td>
                 </tr>
               ))
             )}
@@ -386,7 +550,23 @@ export default function ISP() {
                         {serviceStatuses.map(s => <option key={s} value={s}>{getStatusLabel(s)}</option>)}
                       </select>
                     </div>
-                    <button onClick={() => { setBillForm({ amount: sd.package?.price || 0, billing_date: new Date().toISOString().split('T')[0], due_date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0], description: '' }); setShowBillingModal(true); }} className="btn-primary text-xs py-1.5 px-3">
+                    <button onClick={() => {
+                      const pkg = sd.package;
+                      const cycleDays: Record<string, number> = { monthly: 30, quarterly: 90, semi_annual: 180, annual: 365 };
+                      const defaultDueDays = cycleDays[pkg?.billing_cycle] || 30;
+                      const nextBillDate = sd.paid_through_date
+                        ? new Date(new Date(sd.paid_through_date).getTime() + 86400000)
+                        : new Date();
+                      const nextDue = new Date(nextBillDate.getTime() + defaultDueDays * 86400000);
+                      setBillForm({
+                        amount: pkg?.price || 0,
+                        billing_date: nextBillDate.toISOString().split('T')[0],
+                        due_date: nextDue.toISOString().split('T')[0],
+                        description: '',
+                        months: 1,
+                      });
+                      setShowBillingModal(true);
+                    }} className="btn-primary text-xs py-1.5 px-3">
                       <CreditCard size={14} className="mr-1" /> Create Invoice
                     </button>
                   </div>
@@ -409,6 +589,7 @@ export default function ISP() {
                     <div><p className="text-xs text-surface-500">Connection Type</p><p className="text-sm font-medium capitalize">{sd.connection_type || '-'}</p></div>
                     <div><p className="text-xs text-surface-500">Static IP</p><p className="text-sm font-mono text-xs">{sd.static_ip || '-'}</p></div>
                     <div><p className="text-xs text-surface-500">Installation Date</p><p className="text-sm font-medium">{sd.installation_date ? formatDate(sd.installation_date) : '-'}</p></div>
+                    <div><p className="text-xs text-surface-500">Paid Through</p><p className={`text-sm font-medium ${sd.paid_through_date && new Date(sd.paid_through_date) < new Date() ? 'text-red-500' : 'text-emerald-600'}`}>{sd.paid_through_date ? formatDate(sd.paid_through_date) : '-'}</p></div>
                     <div><p className="text-xs text-surface-500">Created</p><p className="text-sm font-medium">{formatDate(sd.created_at)}</p></div>
                   </div>
 
@@ -432,7 +613,23 @@ export default function ISP() {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-medium text-surface-700 dark:text-surface-300">Billing History</p>
-                    <button onClick={() => { setBillForm({ amount: sd.package?.price || 0, billing_date: new Date().toISOString().split('T')[0], due_date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0], description: '' }); setShowBillingModal(true); }} className="btn-primary text-xs py-1.5 px-3">
+                    <button onClick={() => {
+                      const pkg = sd.package;
+                      const cycleDays: Record<string, number> = { monthly: 30, quarterly: 90, semi_annual: 180, annual: 365 };
+                      const defaultDueDays = cycleDays[pkg?.billing_cycle] || 30;
+                      const nextBillDate = sd.paid_through_date
+                        ? new Date(new Date(sd.paid_through_date).getTime() + 86400000)
+                        : new Date();
+                      const nextDue = new Date(nextBillDate.getTime() + defaultDueDays * 86400000);
+                      setBillForm({
+                        amount: pkg?.price || 0,
+                        billing_date: nextBillDate.toISOString().split('T')[0],
+                        due_date: nextDue.toISOString().split('T')[0],
+                        description: '',
+                        months: 1,
+                      });
+                      setShowBillingModal(true);
+                    }} className="btn-primary text-xs py-1.5 px-3">
                       <Plus size={14} className="mr-1" /> New Invoice
                     </button>
                   </div>
@@ -564,10 +761,14 @@ export default function ISP() {
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-4 gap-4">
                 <div>
-                  <label className="label">Price (TZS) *</label>
+                  <label className="label">Sell Price (TZS) *</label>
                   <input type="number" className="input" value={pkgForm.price || ''} onChange={e => setPkgForm({...pkgForm, price: Number(e.target.value)})} required />
+                </div>
+                <div>
+                  <label className="label">Cost Price (TZS)</label>
+                  <input type="number" className="input" value={pkgForm.cost_price || ''} onChange={e => setPkgForm({...pkgForm, cost_price: Number(e.target.value)})} />
                 </div>
                 <div>
                   <label className="label">Setup Fee</label>
@@ -608,10 +809,43 @@ export default function ISP() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="label">Customer *</label>
-                  <select className="input" value={subForm.customer_id} onChange={e => setSubForm({...subForm, customer_id: e.target.value})} required>
-                    <option value="">Select customer</option>
-                    {customers.map((c: any) => <option key={c.id} value={c.id}>{c.company_name || c.contact_person}</option>)}
-                  </select>
+                  <div className="flex gap-2">
+                    <select className="input flex-1" value={subForm.customer_id} onChange={e => { setSubForm({...subForm, customer_id: e.target.value}); loadCustomerSubs(e.target.value); }} required>
+                      <option value="">Select customer</option>
+                      {customers.map((c: any) => <option key={c.id} value={c.id}>{c.company_name || c.contact_person}</option>)}
+                    </select>
+                    <button type="button" onClick={() => setShowQuickCustomer(true)} className="btn-secondary text-xs whitespace-nowrap px-3 py-1.5" title="Add new customer">
+                      <Plus size={14} className="mr-1" /> New
+                    </button>
+                  </div>
+                  {showQuickCustomer && (
+                    <div className="mt-3 rounded-lg border border-accent-200 bg-accent-50 p-3 space-y-2 dark:border-accent-700 dark:bg-accent-900/20">
+                      <p className="text-xs font-semibold text-accent-700 dark:text-accent-300">Quick Add Customer</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input className="input text-xs" placeholder="Company name" value={quickCustForm.company_name} onChange={e => setQuickCustForm({...quickCustForm, company_name: e.target.value})} />
+                        <input className="input text-xs" placeholder="Contact person" value={quickCustForm.contact_person} onChange={e => setQuickCustForm({...quickCustForm, contact_person: e.target.value})} />
+                        <input className="input text-xs" placeholder="Phone *" value={quickCustForm.phone} onChange={e => setQuickCustForm({...quickCustForm, phone: e.target.value})} />
+                        <input className="input text-xs" placeholder="Email" value={quickCustForm.email} onChange={e => setQuickCustForm({...quickCustForm, email: e.target.value})} />
+                      </div>
+                      <input className="input text-xs w-full" placeholder="Address" value={quickCustForm.address} onChange={e => setQuickCustForm({...quickCustForm, address: e.target.value})} />
+                      <div className="flex justify-end gap-2 pt-1">
+                        <button type="button" onClick={() => { setShowQuickCustomer(false); setQuickCustForm({ company_name: '', contact_person: '', phone: '', email: '', address: '' }); }} className="btn-secondary text-xs py-1 px-3">Cancel</button>
+                        <button type="button" onClick={async () => {
+                          if (!quickCustForm.phone && !quickCustForm.company_name && !quickCustForm.contact_person) return toast.error('Enter company name, contact person, or phone');
+                          try {
+                            const res = await dataService.createCustomer(quickCustForm);
+                            const newCust = res.data;
+                            const cRes = await dataService.getCustomers({ limit: 500 });
+                            setCustomers(cRes.data || []);
+                            setSubForm({...subForm, customer_id: newCust.id});
+                            setShowQuickCustomer(false);
+                            setQuickCustForm({ company_name: '', contact_person: '', phone: '', email: '', address: '' });
+                            toast.success('Customer created');
+                          } catch (error) { toast.error('Failed to create customer'); }
+                        }} className="btn-primary text-xs py-1 px-3">Save Customer</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="label">Package *</label>
@@ -649,6 +883,25 @@ export default function ISP() {
                 <label className="label">Notes</label>
                 <textarea className="input" rows={2} value={subForm.notes} onChange={e => setSubForm({...subForm, notes: e.target.value})} />
               </div>
+              {customerSubs.length > 0 && (
+                <div className="rounded-lg border border-surface-200 bg-surface-50 p-3 dark:border-surface-700 dark:bg-surface-800">
+                  <p className="text-xs font-medium text-surface-500 mb-2">Existing Subscriptions ({customerSubs.length})</p>
+                  <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                    {customerSubs.map((cs: any) => (
+                      <div key={cs.id} className="flex items-center justify-between text-xs bg-white dark:bg-surface-700 rounded px-2 py-1.5">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-mono font-medium text-surface-700 dark:text-surface-200">{cs.subscriber_code}</span>
+                          <span className="text-surface-400 truncate">{cs.package?.name || '-'}</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className={statusColors[cs.service_status]}>{getStatusLabel(cs.service_status)}</span>
+                          {cs.installation_address && <span className="text-surface-400 truncate max-w-[120px]" title={cs.installation_address}>{cs.installation_address}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setShowSubModal(false)} className="btn-secondary">Cancel</button>
                 <button type="submit" disabled={submitting} className="btn-primary">{submitting ? 'Adding...' : 'Add Subscriber'}</button>
@@ -667,9 +920,32 @@ export default function ISP() {
               <button onClick={() => setShowBillingModal(false)} className="rounded-lg p-2 text-surface-400 hover:bg-surface-100"><X size={20} /></button>
             </div>
             <div className="space-y-4">
-              <div>
-                <label className="label">Amount (TZS) *</label>
-                <input type="number" className="input" value={billForm.amount || ''} onChange={e => setBillForm({...billForm, amount: Number(e.target.value)})} />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Months *</label>
+                  <input type="number" min={1} className="input" value={billForm.months || 1} onChange={e => {
+                    const months = Math.max(1, Number(e.target.value));
+                    const pkgPrice = sd?.package?.price || 0;
+                    const cycleDays: Record<string, number> = { monthly: 30, quarterly: 90, semi_annual: 180, annual: 365 };
+                    const defaultDueDays = cycleDays[sd?.package?.billing_cycle] || 30;
+                    const nextBillDate = sd?.paid_through_date
+                      ? new Date(new Date(sd.paid_through_date).getTime() + 86400000)
+                      : new Date();
+                    const totalDays = defaultDueDays * months;
+                    const nextDue = new Date(nextBillDate.getTime() + totalDays * 86400000);
+                    setBillForm({
+                      ...billForm,
+                      months,
+                      amount: pkgPrice * months,
+                      billing_date: nextBillDate.toISOString().split('T')[0],
+                      due_date: nextDue.toISOString().split('T')[0],
+                    });
+                  }} />
+                </div>
+                <div>
+                  <label className="label">Amount (TZS) *</label>
+                  <input type="number" className="input" value={billForm.amount || ''} onChange={e => setBillForm({...billForm, amount: Number(e.target.value)})} />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -683,7 +959,7 @@ export default function ISP() {
               </div>
               <div>
                 <label className="label">Description (optional)</label>
-                <textarea className="input" rows={2} placeholder="Custom description for the invoice PDF" value={billForm.description} onChange={e => setBillForm({...billForm, description: e.target.value})} />
+                <textarea className="input" rows={2} placeholder="e.g. 3-month prepaid subscription" value={billForm.description} onChange={e => setBillForm({...billForm, description: e.target.value})} />
               </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button onClick={() => setShowBillingModal(false)} className="btn-secondary">Cancel</button>
@@ -704,7 +980,7 @@ export default function ISP() {
               <h2 className="text-lg font-semibold">Record Payment</h2>
               <button onClick={() => setShowPayModal(false)} className="rounded-lg p-2 text-surface-400 hover:bg-surface-100"><X size={20} /></button>
             </div>
-            <div className="space-y-3">
+             <div className="space-y-3">
               <p className="text-sm text-surface-500">Invoice amount: <span className="font-bold text-surface-900">{formatCurrency(payingBill.amount)}</span></p>
               <p className="text-sm text-surface-500">Already paid: <span className="font-medium text-accent-600">{formatCurrency(payingBill.paid_amount)}</span></p>
               <p className="text-sm text-surface-500">Outstanding: <span className="font-bold text-red-600">{formatCurrency(Number(payingBill.amount) - Number(payingBill.paid_amount))}</span></p>
@@ -712,6 +988,19 @@ export default function ISP() {
                 <label className="label">Payment Amount *</label>
                 <input type="number" className="input" value={payAmount || ''} onChange={e => setPayAmount(Number(e.target.value))} />
               </div>
+              {(() => {
+                const monthlyPrice = sd?.package?.price || payingBill.amount;
+                const months = Math.max(1, Math.round(payAmount / monthlyPrice));
+                const fromDate = sd?.paid_through_date ? new Date(sd.paid_through_date) : new Date(payingBill.billing_date || payingBill.created_at);
+                const extendedTo = new Date(fromDate);
+                extendedTo.setMonth(extendedTo.getMonth() + months);
+                return payAmount > 0 ? (
+                  <p className="text-xs text-surface-500 bg-surface-50 dark:bg-surface-700 rounded-lg p-2">
+                    This payment extends service through <span className="font-semibold text-surface-700 dark:text-surface-200">{formatDate(extendedTo.toISOString().split('T')[0])}</span>
+                    {' '}({months} month{months > 1 ? 's' : ''})
+                  </p>
+                ) : null;
+              })()}
               <div className="flex justify-end gap-3 pt-2">
                 <button onClick={() => setShowPayModal(false)} className="btn-secondary">Cancel</button>
                 <button onClick={handlePayBill} disabled={!payAmount} className="btn-primary">

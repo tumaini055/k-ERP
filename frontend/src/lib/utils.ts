@@ -5,23 +5,27 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export const formatCurrency = (amount: number, currency: string = 'TZS'): string => {
+export const formatCurrency = (amount: number, currency?: string): string => {
   const abs = Math.abs(amount);
-  let formatted: string;
+  const sign = amount < 0 ? '-' : '';
   if (abs >= 1_000_000_000) {
-    formatted = `TSh${(amount / 1_000_000_000).toFixed(1).replace(/\.0$/, '')}B`;
-  } else if (abs >= 1_000_000) {
-    formatted = `TSh${(amount / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
-  } else if (abs >= 1_000) {
-    formatted = `TSh${(amount / 1_000).toFixed(1).replace(/\.0$/, '')}K`;
-  } else {
-    formatted = new Intl.NumberFormat('sw-TZ', {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 0,
-    }).format(amount);
+    const val = (abs / 1_000_000_000).toFixed(2);
+    return `${sign}TSH ${val.replace(/\.?0+$/, '')}B`;
   }
-  return formatted;
+  if (abs >= 1_000_000) {
+    const val = (abs / 1_000_000).toFixed(2);
+    return `${sign}TSH ${val.replace(/\.?0+$/, '')}M`;
+  }
+  if (abs >= 1_000) {
+    return `${sign}TSH ${abs.toLocaleString('en-US')}`;
+  }
+  return `${sign}TSH ${abs}`;
+};
+
+export const formatCurrencyFull = (amount: number): string => {
+  const abs = Math.abs(amount);
+  const sign = amount < 0 ? '-' : '';
+  return `${sign}TSH ${abs.toLocaleString('en-US')}`;
 };
 
 export const formatDate = (date: string): string => {

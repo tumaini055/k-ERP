@@ -58,13 +58,15 @@ router.put('/packages/:id', checkPermission('isp', 'canEdit'), async (req: AuthR
 
 router.get('/subscribers', checkPermission('isp', 'canView'), async (req: AuthRequest, res: Response) => {
   try {
-    const { status, package_id, search, page = 1, limit = 10 } = req.query;
+    const { status, package_id, customer_id, subscriber_code, search, page = 1, limit = 10 } = req.query;
     let query = supabase
       .from('isp_subscribers')
       .select('*, customer:customers!isp_subscribers_customer_id_fkey(company_name, contact_person, phone), package:isp_packages!isp_subscribers_package_id_fkey(name, bandwidth_download, bandwidth_upload, price)', { count: 'exact' });
 
     if (status) query = query.eq('service_status', status);
     if (package_id) query = query.eq('package_id', package_id);
+    if (customer_id) query = query.eq('customer_id', customer_id);
+    if (subscriber_code) query = query.eq('subscriber_code', subscriber_code);
     if (search) {
       query = query.or(`subscriber_code.ilike.%${search}%,customer.company_name.ilike.%${search}%`);
     }
@@ -212,9 +214,218 @@ router.put('/billing/:id/pay', checkPermission('isp', 'canEdit'), async (req: Au
       .select('*')
       .single();
     if (error) throw error;
+
+    // Update subscriber's paid_through_date when fully paid
+    if (newPaid >= bill.amount && bill.subscriber_id) {
+      const { data: sub } = await supabase
+        .from('isp_subscribers')
+        .select('paid_through_date, package:isp_packages!isp_subscribers_package_id_fkey(price, billing_cycle)')
+        .eq('id', bill.subscriber_id)
+        .single();
+
+      if (sub) {
+        const monthlyPrice = (sub.package as any)?.price || bill.amount;
+        const monthsCovered = Math.max(1, Math.round(bill.amount / monthlyPrice));
+        const fromDate = sub.paid_through_date
+          ? new Date(sub.paid_through_date)
+          : new Date(bill.billing_date || bill.created_at);
+        const newPaidThrough = new Date(fromDate);
+        newPaidThrough.setMonth(newPaidThrough.getMonth() + monthsCovered);
+
+        await supabase
+          .from('isp_subscribers')
+          .update({ paid_through_date: newPaidThrough.toISOString().split('T')[0] })
+          .eq('id', bill.subscriber_id);
+      }
+    }
+
     res.json({ data });
   } catch (error) {
     res.status(500).json({ error: 'Failed to record payment' });
+  }
+});
+
+router.get('/subscriptions', checkPermission('isp', 'canView'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { ending_within_days, status } = req.query;
+
+    let subQuery = supabase
+      .from('isp_subscribers')
+      .select('*, customer:customers!isp_subscribers_customer_id_fkey(company_name, contact_person, phone), package:isp_packages!isp_subscribers_package_id_fkey(name, price, billing_cycle, bandwidth_download, bandwidth_upload, bandwidth_unit)');
+
+    if (status) {
+      subQuery = subQuery.eq('service_status', status);
+    } else {
+      subQuery = subQuery.not('service_status', 'eq', 'disconnected');
+    }
+
+    const { data: subscribers, error: subError } = await subQuery;
+    if (subError) throw subError;
+
+    const result: any[] = [];
+
+    if (subscribers && subscribers.length > 0) {
+      const ids = subscribers.map(s => s.id);
+
+      const { data: billingData, error: billError } = await supabase
+        .from('isp_billing')
+        .select('subscriber_id, due_date')
+        .in('subscriber_id', ids)
+        .order('due_date', { ascending: false });
+
+      if (billError) throw billError;
+
+      const latestDueDates: Record<string, string> = {};
+      for (const bill of billingData || []) {
+        if (!latestDueDates[bill.subscriber_id]) {
+          latestDueDates[bill.subscriber_id] = bill.due_date;
+        }
+      }
+
+      const cycleMonths: Record<string, number> = { monthly: 1, quarterly: 3, semi_annual: 6, annual: 12 };
+      const now = new Date();
+
+      for (const sub of subscribers) {
+        let endDate: Date;
+
+        if (sub.paid_through_date) {
+          endDate = new Date(sub.paid_through_date);
+        } else {
+          const lastDueDate = latestDueDates[sub.id];
+          if (lastDueDate) {
+            endDate = new Date(lastDueDate);
+          } else if (sub.installation_date) {
+            endDate = new Date(sub.installation_date);
+            const months = cycleMonths[sub.package?.billing_cycle] || 1;
+            endDate.setMonth(endDate.getMonth() + months);
+          } else {
+            endDate = new Date(sub.created_at);
+            endDate.setMonth(endDate.getMonth() + 1);
+          }
+        }
+
+        const daysRemaining = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+        result.push({
+          id: sub.id,
+          subscriber_code: sub.subscriber_code,
+          service_status: sub.service_status,
+          installation_address: sub.installation_address,
+          installation_date: sub.installation_date,
+          connection_type: sub.connection_type,
+          customer: sub.customer,
+          package: sub.package,
+          paid_through_date: sub.paid_through_date,
+          end_date: endDate.toISOString().split('T')[0],
+          days_remaining: daysRemaining,
+        });
+      }
+    }
+
+    let filtered = result;
+    if (ending_within_days) {
+      const days = Number(ending_within_days);
+      filtered = result.filter(r => r.days_remaining <= days && r.days_remaining >= -90);
+    }
+
+    filtered.sort((a, b) => a.days_remaining - b.days_remaining);
+
+    res.json({ data: filtered });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch subscriptions' });
+  }
+});
+
+router.get('/stats', checkPermission('isp', 'canView'), async (req: AuthRequest, res: Response) => {
+  try {
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
+
+    const { count: totalSubs } = await supabase
+      .from('isp_subscribers')
+      .select('*', { count: 'exact', head: true });
+
+    const { count: activeCount } = await supabase
+      .from('isp_subscribers')
+      .select('*', { count: 'exact', head: true })
+      .eq('service_status', 'active');
+
+    const { count: overdueCount } = await supabase
+      .from('isp_subscribers')
+      .select('*', { count: 'exact', head: true })
+      .not('paid_through_date', 'is', null)
+      .lt('paid_through_date', todayStr)
+      .neq('service_status', 'disconnected');
+
+    // Get active subscribers with packages for projected revenue/cost
+    const { data: activeSubs } = await supabase
+      .from('isp_subscribers')
+      .select('package:isp_packages!isp_subscribers_package_id_fkey(price, cost_price)')
+      .eq('service_status', 'active');
+
+    let projectedRevenue = 0;
+    let projectedCost = 0;
+    for (const sub of activeSubs || []) {
+      const pkg = Array.isArray(sub.package) ? sub.package[0] : sub.package;
+      if (pkg) {
+        projectedRevenue += Number(pkg.price) || 0;
+        projectedCost += Number(pkg.cost_price) || 0;
+      }
+    }
+
+    // Get actual payments this month
+    const { data: monthlyBills } = await supabase
+      .from('isp_billing')
+      .select('paid_amount, subscriber_id')
+      .not('paid_at', 'is', null)
+      .gte('paid_at', monthStart)
+      .lte('paid_at', monthEnd);
+
+    // Get subscriber package cost mappings
+    const subIds = [...new Set((monthlyBills || []).map(b => b.subscriber_id).filter(Boolean))];
+    const costMap: Record<string, number> = {};
+
+    if (subIds.length > 0) {
+      const { data: subs } = await supabase
+        .from('isp_subscribers')
+        .select('id, package:isp_packages!isp_subscribers_package_id_fkey(price, cost_price)')
+        .in('id', subIds);
+
+      for (const sub of subs || []) {
+        const pkg = Array.isArray(sub.package) ? sub.package[0] : sub.package;
+        if (pkg && Number(pkg.price) > 0) {
+          costMap[sub.id] = (Number(pkg.cost_price) || 0) / Number(pkg.price);
+        }
+      }
+    }
+
+    let collected = 0;
+    let costTotal = 0;
+
+    for (const bill of monthlyBills || []) {
+      const amt = Number(bill.paid_amount) || 0;
+      collected += amt;
+      const ratio = costMap[bill.subscriber_id] || 0;
+      costTotal += amt * ratio;
+    }
+
+    res.json({
+      data: {
+        total_subscribers: totalSubs || 0,
+        active_count: activeCount || 0,
+        overdue_count: overdueCount || 0,
+        projected_revenue: projectedRevenue,
+        projected_cost: projectedCost,
+        projected_profit: projectedRevenue - projectedCost,
+        monthly_collected: collected,
+        monthly_cost: Math.round(costTotal * 100) / 100,
+        monthly_profit: Math.round((collected - costTotal) * 100) / 100,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch stats' });
   }
 });
 
