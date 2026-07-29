@@ -68,6 +68,8 @@ export default function ISP() {
 
   const [editingBillId, setEditingBillId] = useState<string | null>(null);
   const [editDescription, setEditDescription] = useState('');
+  const [editingPayDate, setEditingPayDate] = useState(false);
+  const [editPayDate, setEditPayDate] = useState('');
 
   const [subscriptions, setSubscriptions] = useState<any[]>([]);
   const [subsLoading, setSubsLoading] = useState(false);
@@ -246,6 +248,20 @@ export default function ISP() {
         setSubDetail({ ...subDetail, service_status });
       }
     } catch (error) { toast.error('Failed to update status'); }
+  };
+
+  const savePayDate = async () => {
+    if (!editPayDate || !selectedSub) return;
+    try {
+      await dataService.updateISPSubscriber(selectedSub.id, { paid_through_date: editPayDate });
+      toast.success('Payment date updated');
+      setEditingPayDate(false);
+      setSubDetail({ ...subDetail, paid_through_date: editPayDate });
+      setSelectedSub({ ...selectedSub, paid_through_date: editPayDate } as ISPSubscriber);
+      loadData();
+      loadSubscriptions(subsFilter);
+      loadStats();
+    } catch (error) { toast.error('Failed to update payment date'); }
   };
 
   const handleCreateBill = async () => {
@@ -589,7 +605,20 @@ export default function ISP() {
                     <div><p className="text-xs text-surface-500">Connection Type</p><p className="text-sm font-medium capitalize">{sd.connection_type || '-'}</p></div>
                     <div><p className="text-xs text-surface-500">Static IP</p><p className="text-sm font-mono text-xs">{sd.static_ip || '-'}</p></div>
                     <div><p className="text-xs text-surface-500">Installation Date</p><p className="text-sm font-medium">{sd.installation_date ? formatDate(sd.installation_date) : '-'}</p></div>
-                    <div><p className="text-xs text-surface-500">Paid Through</p><p className={`text-sm font-medium ${sd.paid_through_date && new Date(sd.paid_through_date) < new Date() ? 'text-red-500' : 'text-emerald-600'}`}>{sd.paid_through_date ? formatDate(sd.paid_through_date) : '-'}</p></div>
+                    <div>
+                      <p className="text-xs text-surface-500">Next Payment Date</p>
+                      {editingPayDate ? (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <input type="date" className="input text-xs py-1 px-2 w-36" value={editPayDate} onChange={e => setEditPayDate(e.target.value)} />
+                          <button onClick={savePayDate} className="btn-primary text-xs py-1 px-2"><CheckCircle2 size={12} /></button>
+                          <button onClick={() => setEditingPayDate(false)} className="btn-secondary text-xs py-1 px-2"><X size={12} /></button>
+                        </div>
+                      ) : (
+                        <button onClick={() => { setEditPayDate(sd.paid_through_date || ''); setEditingPayDate(true); }} className={`text-sm font-medium text-left hover:underline ${sd.paid_through_date && new Date(sd.paid_through_date) < new Date() ? 'text-red-500' : 'text-emerald-600'}`}>
+                          {sd.paid_through_date ? formatDate(sd.paid_through_date) : 'Set date'}
+                        </button>
+                      )}
+                    </div>
                     <div><p className="text-xs text-surface-500">Created</p><p className="text-sm font-medium">{formatDate(sd.created_at)}</p></div>
                   </div>
 

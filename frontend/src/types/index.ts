@@ -236,6 +236,7 @@ export interface ISPSubscriber {
   connection_type?: string;
   static_ip?: string;
   notes?: string;
+  paid_through_date?: string;
   customer?: Customer;
   package?: ISPPackage;
   created_at: string;
