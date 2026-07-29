@@ -5,7 +5,7 @@ import { ISPSubscriber, ISPPackage, ISPBilling } from '../types';
 import { formatDate, formatCurrency, formatCurrencyFull, formatDateTime, getStatusLabel } from '../lib/utils';
 import {
   Wifi, Plus, Users, Signal, DollarSign, Search, X, RefreshCw,
-  Home, Building2, Globe, CheckCircle2, CreditCard, Download, Calendar, TrendingUp,
+  Home, Building2, Globe, CheckCircle2, CreditCard, Download, Calendar, TrendingUp, ChevronDown, Bell,
 } from 'lucide-react';
 
 const typeIcons: Record<string, any> = { home: Home, business: Building2, enterprise: Globe };
@@ -83,6 +83,16 @@ export default function ISP() {
   const [showQuickCustomer, setShowQuickCustomer] = useState(false);
   const [quickCustForm, setQuickCustForm] = useState({ company_name: '', contact_person: '', phone: '', email: '', address: '' });
 
+  const [monthlyCollections, setMonthlyCollections] = useState<any[]>([]);
+  const [monthlyCollLoading, setMonthlyCollLoading] = useState(false);
+  const [finalizingMonth, setFinalizingMonth] = useState<string | null>(null);
+  const [showMonthlyColl, setShowMonthlyColl] = useState(true);
+  const [monthlyYearFilter, setMonthlyYearFilter] = useState('all');
+  const [dismissedNotifs, setDismissedNotifs] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('isp_dismissed_notifs') || '[]'); } catch { return []; }
+  });
+  const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+
   useEffect(() => {
     const params: any = { limit: 100 };
     if (search) params.search = search;
@@ -91,6 +101,7 @@ export default function ISP() {
     loadData(params);
     loadPackages();
     loadStats();
+    loadMonthlyCollections();
   }, [search, statusFilter, pkgFilter]);
 
   const loadData = async (params?: any) => {
@@ -137,6 +148,35 @@ export default function ISP() {
   };
 
   useEffect(() => { loadSubscriptions(subsFilter); }, [subsFilter]);
+
+  const loadMonthlyCollections = async () => {
+    setMonthlyCollLoading(true);
+    try {
+      const res = await dataService.getISPMonthlyCollections();
+      setMonthlyCollections(res.data || []);
+    } catch (error) { setMonthlyCollections([]); }
+    setMonthlyCollLoading(false);
+  };
+
+  const handleFinalizeMonth = async (ym: string) => {
+    setFinalizingMonth(ym);
+    try {
+      await dataService.finalizeISPMonthlyCollection(ym);
+      toast.success(`Month ${ym} finalized`);
+      loadMonthlyCollections();
+      loadStats();
+    } catch (error) { toast.error('Failed to finalize month'); }
+    setFinalizingMonth(null);
+  };
+
+  const handleUnfinalizeMonth = async (id: string, ym: string) => {
+    try {
+      await dataService.deleteISPMonthlyCollection(id);
+      toast.success(`Month ${ym} reopened`);
+      loadMonthlyCollections();
+      loadStats();
+    } catch (error) { toast.error('Failed to reopen month'); }
+  };
 
   const subEndColor = (days: number) => {
     if (days < 0) return 'text-red-600 bg-red-50 dark:bg-red-900/20 dark:text-red-400 ring-red-200 dark:ring-red-800';
@@ -264,6 +304,25 @@ export default function ISP() {
     } catch (error) { toast.error('Failed to update payment date'); }
   };
 
+  const openBillingForSub = (sub: any) => {
+    const cycleDays: Record<string, number> = { monthly: 30, quarterly: 90, semi_annual: 180, annual: 365 };
+    const defaultDueDays = cycleDays[sub.package?.billing_cycle] || 30;
+    const nextBillDate = sub.paid_through_date
+      ? new Date(new Date(sub.paid_through_date).getTime() + 86400000)
+      : new Date();
+    const nextDue = new Date(nextBillDate.getTime() + defaultDueDays * 86400000);
+    setSelectedSub(sub);
+    setSubDetail(sub);
+    setBillForm({
+      amount: sub.package?.price || 0,
+      billing_date: nextBillDate.toISOString().split('T')[0],
+      due_date: nextDue.toISOString().split('T')[0],
+      description: '',
+      months: 1,
+    });
+    setShowBillingModal(true);
+  };
+
   const handleCreateBill = async () => {
     if (!billForm.amount || !selectedSub) return;
     try {
@@ -277,6 +336,7 @@ export default function ISP() {
       toast.success('Invoice created');
       setShowBillingModal(false);
       setBillForm({ amount: 0, billing_date: '', due_date: '', description: '', months: 1 });
+      dismissNotif(selectedSub.id);
       loadBilling(selectedSub.id);
       loadStats();
     } catch (error) { toast.error('Failed to create invoice'); }
@@ -304,6 +364,16 @@ export default function ISP() {
     } catch (error) { toast.error('Failed to record payment'); }
   };
 
+  const dismissNotif = (subId: string) => {
+    const next = [...dismissedNotifs, subId];
+    setDismissedNotifs(next);
+    localStorage.setItem('isp_dismissed_notifs', JSON.stringify(next));
+  };
+
+  const expiringNotifs = subscriptions.filter(
+    (s: any) => s.days_remaining >= 0 && s.days_remaining <= 5 && s.service_status === 'active' && !dismissedNotifs.includes(s.id)
+  );
+
   const sd = subDetail;
 
   return (
@@ -314,6 +384,65 @@ export default function ISP() {
           <p className="page-subtitle">Manage internet packages, subscribers, and billing</p>
         </div>
         <div className="flex items-center gap-2">
+          <div className="relative">
+            <button onClick={() => setShowNotifDropdown(!showNotifDropdown)} className="btn-secondary relative">
+              <Bell size={16} />
+              {expiringNotifs.length > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white leading-none">
+                  {expiringNotifs.length > 9 ? '9+' : expiringNotifs.length}
+                </span>
+              )}
+            </button>
+            {showNotifDropdown && (
+              <div className="absolute right-0 top-full mt-2 w-[380px] z-50">
+                <div className="rounded-xl border border-surface-200 bg-white shadow-xl dark:border-surface-700 dark:bg-surface-800 overflow-hidden">
+                  <div className="flex items-center justify-between border-b border-surface-200 px-4 py-2.5 dark:border-surface-700">
+                    <span className="text-sm font-semibold text-surface-700 dark:text-surface-200">
+                      {expiringNotifs.length === 0 ? 'No notifications' : `${expiringNotifs.length} subscriber${expiringNotifs.length > 1 ? 's' : ''} need invoicing`}
+                    </span>
+                    <button onClick={() => setShowNotifDropdown(false)} className="text-surface-400 hover:text-surface-600"><X size={14} /></button>
+                  </div>
+                  <div className="max-h-80 overflow-y-auto">
+                    {expiringNotifs.length === 0 ? (
+                      <p className="px-4 py-6 text-center text-sm text-surface-400">All caught up!</p>
+                    ) : (
+                      expiringNotifs.map((s: any) => (
+                        <div key={s.id} className="flex items-center justify-between border-b border-surface-100 px-4 py-2.5 last:border-0 dark:border-surface-700/50">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono text-xs font-medium text-surface-500">{s.subscriber_code}</span>
+                              <span className="text-sm font-medium text-surface-900 dark:text-surface-100 truncate">{s.customer?.company_name || s.customer?.contact_person || '-'}</span>
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-xs text-surface-400 truncate">{s.package?.name}</span>
+                              <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${subEndColor(s.days_remaining)}`}>
+                                {s.days_remaining === 0 ? 'Today' : `${s.days_remaining}d`}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0 ml-2">
+                            <button onClick={() => { openBillingForSub(s); setShowNotifDropdown(false); }} className="btn-primary text-[10px] py-1 px-2 whitespace-nowrap">
+                              <CreditCard size={10} className="mr-0.5" /> Invoice
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); dismissNotif(s.id); }} className="btn-secondary text-[10px] py-1 px-1.5" title="Dismiss">
+                              <X size={10} />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  {expiringNotifs.length > 0 && (
+                    <div className="border-t border-surface-200 px-4 py-2 dark:border-surface-700">
+                      <button onClick={() => { setDismissedNotifs([]); localStorage.removeItem('isp_dismissed_notifs'); }} className="text-xs text-primary-600 hover:underline">
+                        Clear dismissed
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
           <button onClick={() => { loadData(); loadPackages(); loadStats(); }} className="btn-secondary">
             <RefreshCw size={16} className="mr-1" /> Refresh
           </button>
@@ -357,6 +486,91 @@ export default function ISP() {
             <p className="stat-label">Est. Monthly Profit {stats?.projected_revenue > 0 ? <span className="text-[10px]">({Math.round((stats.projected_profit / stats.projected_revenue) * 100)}%)</span> : ''}</p>
           </div>
         </div>
+      </div>
+
+      {/* Monthly Collections */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <button onClick={() => setShowMonthlyColl(!showMonthlyColl)} className="text-sm font-semibold text-surface-700 dark:text-surface-300 flex items-center gap-2 hover:text-surface-900">
+            <DollarSign size={16} className="text-emerald-500" /> Monthly Collections
+            <ChevronDown size={14} className={`transition-transform ${showMonthlyColl ? '' : '-rotate-90'}`} />
+            {monthlyCollLoading && <RefreshCw size={14} className="animate-spin text-surface-400" />}
+          </button>
+          <div className="flex items-center gap-2">
+            {showMonthlyColl && monthlyCollections.length > 0 && (
+              <select className="input w-auto min-w-[100px] text-xs py-1" value={monthlyYearFilter} onChange={e => setMonthlyYearFilter(e.target.value)}>
+                <option value="all">All Years</option>
+                {[...new Set(monthlyCollections.map((m: any) => m.year_month.slice(0, 4)))].sort().reverse().map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            )}
+            <button onClick={loadMonthlyCollections} className="btn-secondary text-xs py-1.5 px-3">
+              <RefreshCw size={14} className="mr-1" /> Refresh
+            </button>
+          </div>
+        </div>
+        {showMonthlyColl && (
+        <div className="table-container">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th className="text-right">Projected</th>
+                <th className="text-right">Collected</th>
+                <th className="text-right">Remaining</th>
+                <th>Collection Rate</th>
+                <th>Status</th>
+                <th className="text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {monthlyCollections.length === 0 ? (
+                <tr><td colSpan={7} className="text-center py-8 text-surface-400 text-sm">{monthlyCollLoading ? 'Loading...' : 'No data available'}</td></tr>
+              ) : (
+                monthlyCollections.filter((mc: any) => monthlyYearFilter === 'all' || mc.year_month.startsWith(monthlyYearFilter)).map((mc: any) => (
+                  <tr key={mc.year_month} className={mc.is_current ? 'bg-primary-50/50 dark:bg-primary-900/10' : ''}>
+                    <td className="font-medium text-sm">{mc.label} {mc.is_current && <span className="badge-info text-[10px] ml-1">Current</span>}</td>
+                    <td className="text-right text-sm font-medium">{formatCurrency(mc.projected_amount)}</td>
+                    <td className="text-right text-sm font-medium text-emerald-600">{formatCurrency(mc.collected_amount)}</td>
+                    <td className={`text-right text-sm font-medium ${mc.remaining > 0 ? 'text-red-500' : 'text-emerald-600'}`}>{formatCurrency(mc.remaining)}</td>
+                    <td>
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 w-20 rounded-full bg-surface-200 dark:bg-surface-600 overflow-hidden">
+                          <div className={`h-full rounded-full transition-all ${mc.collected_pct >= 100 ? 'bg-emerald-500' : mc.collected_pct >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${Math.min(mc.collected_pct, 100)}%`}} />
+                        </div>
+                        <span className="text-xs font-medium text-surface-500">{mc.collected_pct}%</span>
+                      </div>
+                    </td>
+                    <td>
+                      {mc.status === 'finalized' ? (
+                        <span className="badge-success">Finalized</span>
+                      ) : (
+                        <span className="badge-warning">Open</span>
+                      )}
+                    </td>
+                    <td className="text-center">
+                      {mc.status === 'finalized' ? (
+                        <button onClick={() => handleUnfinalizeMonth(mc.id, mc.year_month)} className="btn-secondary text-xs py-1 px-2" title="Reopen month">
+                          <RefreshCw size={12} className="mr-1" /> Reopen
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleFinalizeMonth(mc.year_month)}
+                          disabled={finalizingMonth === mc.year_month}
+                          className="btn-primary text-xs py-1 px-2">
+                          {finalizingMonth === mc.year_month ? <RefreshCw size={12} className="animate-spin mr-1" /> : <CheckCircle2 size={12} className="mr-1" />}
+                          Finalize
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        )}
       </div>
 
       {/* Subscription End Dates */}

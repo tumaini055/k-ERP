@@ -339,6 +339,18 @@ export const dataService = {
     const { data } = await api.get('/isp/stats');
     return data;
   },
+  async getISPMonthlyCollections() {
+    const { data } = await api.get('/isp/monthly-collections');
+    return data;
+  },
+  async finalizeISPMonthlyCollection(yearMonth: string) {
+    const { data } = await api.post(`/isp/monthly-collections/${yearMonth}/finalize`);
+    return data;
+  },
+  async deleteISPMonthlyCollection(id: string) {
+    const { data } = await api.delete(`/isp/monthly-collections/${id}`);
+    return data;
+  },
   async downloadISPBillingPdf(billingId: string) {
     try {
       const token = localStorage.getItem('token');

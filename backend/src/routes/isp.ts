@@ -430,6 +430,169 @@ router.get('/stats', checkPermission('isp', 'canView'), async (req: AuthRequest,
 });
 
 // ============================================
+// ISP MONTHLY COLLECTIONS
+// ============================================
+router.get('/monthly-collections', checkPermission('isp', 'canView'), async (req: AuthRequest, res: Response) => {
+  try {
+    const months: any[] = [];
+    const now = new Date();
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    // Get all finalized records for this company
+    const { data: finalizedRecords } = await supabase
+      .from('isp_monthly_collections')
+      .select('*')
+      .eq('company_id', req.user!.company_id);
+
+    const finalizedMap: Record<string, any> = {};
+    for (const r of finalizedRecords || []) {
+      finalizedMap[r.year_month] = r;
+    }
+
+    // Get active subscribers with packages for projected
+    const { data: activeSubs } = await supabase
+      .from('isp_subscribers')
+      .select('package:isp_packages!isp_subscribers_package_id_fkey(price)')
+      .eq('service_status', 'active');
+
+    const activePackagePrices = (activeSubs || []).map((sub: any) => {
+      const pkg = Array.isArray(sub.package) ? sub.package[0] : sub.package;
+      return pkg ? Number(pkg.price) || 0 : 0;
+    });
+    const projectedMonthly = activePackagePrices.reduce((s: number, p: number) => s + p, 0);
+
+    // Get all paid billing records for last 12 months
+    const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1).toISOString();
+    const { data: allBills } = await supabase
+      .from('isp_billing')
+      .select('paid_amount, paid_at')
+      .not('paid_at', 'is', null)
+      .gte('paid_at', twelveMonthsAgo);
+
+    // Group billing by year-month
+    const collectedByMonth: Record<string, number> = {};
+    for (const bill of allBills || []) {
+      const d = new Date(bill.paid_at);
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      collectedByMonth[ym] = (collectedByMonth[ym] || 0) + (Number(bill.paid_amount) || 0);
+    }
+
+    // Build last 12 months + current + next month
+    for (let i = -11; i <= 1; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const label = `${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+      const finalized = finalizedMap[ym];
+      const projected = finalized ? (finalized as any).projected_amount || projectedMonthly : projectedMonthly;
+      const collected = finalized ? (finalized as any).collected_amount || 0 : (collectedByMonth[ym] || 0);
+
+      months.push({
+        id: finalized?.id || null,
+        year_month: ym,
+        label,
+        projected_amount: projected,
+        collected_amount: collected,
+        remaining: projected - collected,
+        collected_pct: projected > 0 ? Math.round((collected / projected) * 100) : 0,
+        status: finalized?.status || 'open',
+        finalized_at: finalized?.finalized_at || null,
+        is_current: i === 0,
+      });
+    }
+
+    months.sort((a, b) => a.year_month.localeCompare(b.year_month));
+
+    res.json({ data: months });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch monthly collections' });
+  }
+});
+
+router.post('/monthly-collections/:yearMonth/finalize', checkPermission('isp', 'canEdit'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { yearMonth } = req.params;
+
+    // Compute projected and collected for this month
+    const [year, month] = yearMonth.split('-').map(Number);
+    const monthStart = new Date(year, month - 1, 1).toISOString();
+    const monthEnd = new Date(year, month, 0, 23, 59, 59).toISOString();
+
+    const { data: activeSubs } = await supabase
+      .from('isp_subscribers')
+      .select('package:isp_packages!isp_subscribers_package_id_fkey(price)')
+      .eq('service_status', 'active');
+
+    let projected = 0;
+    for (const sub of activeSubs || []) {
+      const pkg = Array.isArray(sub.package) ? sub.package[0] : sub.package;
+      if (pkg) projected += Number(pkg.price) || 0;
+    }
+
+    const { data: monthBills } = await supabase
+      .from('isp_billing')
+      .select('paid_amount')
+      .not('paid_at', 'is', null)
+      .gte('paid_at', monthStart)
+      .lte('paid_at', monthEnd);
+
+    let collected = 0;
+    for (const bill of monthBills || []) {
+      collected += Number(bill.paid_amount) || 0;
+    }
+
+    // Upsert the finalized record
+    const { data: existing } = await supabase
+      .from('isp_monthly_collections')
+      .select('id')
+      .eq('company_id', req.user!.company_id)
+      .eq('year_month', yearMonth)
+      .maybeSingle();
+
+    let result;
+    if (existing) {
+      const { data } = await supabase
+        .from('isp_monthly_collections')
+        .update({ status: 'finalized', finalized_at: new Date().toISOString(), projected_amount: projected, collected_amount: collected })
+        .eq('id', existing.id)
+        .select('*')
+        .single();
+      result = data;
+    } else {
+      const { data } = await supabase
+        .from('isp_monthly_collections')
+        .insert({
+          company_id: req.user!.company_id,
+          year_month: yearMonth,
+          status: 'finalized',
+          finalized_at: new Date().toISOString(),
+          projected_amount: projected,
+          collected_amount: collected,
+        })
+        .select('*')
+        .single();
+      result = data;
+    }
+
+    res.json({ data: { ...result, projected_amount: projected, collected_amount: collected } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to finalize month' });
+  }
+});
+
+router.delete('/monthly-collections/:id', checkPermission('isp', 'canEdit'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { error } = await supabase
+      .from('isp_monthly_collections')
+      .delete()
+      .eq('id', req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete monthly collection' });
+  }
+});
+
+// ============================================
 // ISP BILLING PDF
 // ============================================
 router.get('/billing/:id/pdf', checkPermission('isp', 'canView'), async (req: AuthRequest, res: Response) => {
