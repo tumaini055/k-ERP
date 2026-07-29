@@ -113,10 +113,28 @@ router.put('/subscribers/:id', checkPermission('isp', 'canEdit'), async (req: Au
       .from('isp_subscribers')
       .update({ ...req.body, updated_at: new Date().toISOString() })
       .eq('id', req.params.id)
-      .select('*')
+      .select('*, package:isp_packages!isp_subscribers_package_id_fkey(name, price)')
       .single();
 
     if (error) throw error;
+
+    if (req.body.package_id) {
+      const { data: pkg } = await supabase
+        .from('isp_packages')
+        .select('name, price')
+        .eq('id', req.body.package_id)
+        .single();
+
+      if (pkg) {
+        const desc = `${pkg.name} - ${Number(pkg.price).toLocaleString()} TZS/month`;
+        await supabase
+          .from('isp_billing')
+          .update({ amount: pkg.price, description: desc })
+          .eq('subscriber_id', req.params.id)
+          .eq('status', 'pending');
+      }
+    }
+
     res.json({ data });
   } catch (error) {
     res.status(500).json({ error: 'Failed to update subscriber' });

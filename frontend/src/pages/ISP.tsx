@@ -5,7 +5,7 @@ import { ISPSubscriber, ISPPackage, ISPBilling } from '../types';
 import { formatDate, formatCurrency, formatCurrencyFull, formatDateTime, getStatusLabel } from '../lib/utils';
 import {
   Wifi, Plus, Users, Signal, DollarSign, Search, X, RefreshCw,
-  Home, Building2, Globe, CheckCircle2, CreditCard, Download, Calendar, TrendingUp, ChevronDown, Bell, MessageSquare,
+  Home, Building2, Globe,   CheckCircle2, CreditCard, Download, Calendar, TrendingUp, ChevronDown, Bell, MessageSquare, Pencil,
 } from 'lucide-react';
 
 const typeIcons: Record<string, any> = { home: Home, business: Building2, enterprise: Globe };
@@ -102,6 +102,18 @@ export default function ISP() {
   const [singleSmsMessage, setSingleSmsMessage] = useState('');
   const [singleSmsPhone, setSingleSmsPhone] = useState('');
   const [singleSmsSending, setSingleSmsSending] = useState(false);
+
+  const [editingSub, setEditingSub] = useState(false);
+  const [editSubForm, setEditSubForm] = useState({
+    package_id: '', connection_type: 'fiber', installation_address: '',
+    static_ip: '', notes: '',
+  });
+  const [showQuickPkg, setShowQuickPkg] = useState(false);
+  const [quickPkgForm, setQuickPkgForm] = useState({
+    name: '', type: 'home' as 'home' | 'business' | 'enterprise',
+    bandwidth_download: 0, bandwidth_upload: 0, bandwidth_unit: 'Mbps',
+    price: 0, cost_price: 0, setup_fee: 0, billing_cycle: 'monthly', description: '',
+  });
 
   useEffect(() => {
     const params: any = { limit: 100 };
@@ -211,6 +223,7 @@ export default function ISP() {
   }, 0);
 
   const openSubDetail = async (sub: ISPSubscriber) => {
+    setEditingSub(false);
     setSelectedSub(sub);
     setDetailTab('overview');
     try {
@@ -221,7 +234,7 @@ export default function ISP() {
     loadBilling(sub.id);
   };
 
-  const closeDetail = () => { setSelectedSub(null); setSubDetail(null); setSubBilling([]); };
+  const closeDetail = () => { setEditingSub(false); setSelectedSub(null); setSubDetail(null); setSubBilling([]); };
 
   const openAddPkg = () => {
     setEditingPkg(null);
@@ -298,6 +311,37 @@ export default function ISP() {
         setSubDetail({ ...subDetail, service_status });
       }
     } catch (error) { toast.error('Failed to update status'); }
+  };
+
+  const saveSubDetail = async () => {
+    if (!selectedSub) return;
+    try {
+      await dataService.updateISPSubscriber(selectedSub.id, editSubForm);
+      toast.success('Subscriber updated');
+      setEditingSub(false);
+      const updatedSub = { ...subDetail, ...editSubForm, package_id: editSubForm.package_id };
+      setSubDetail(updatedSub);
+      setSelectedSub(updatedSub as ISPSubscriber);
+      loadData();
+      loadStats();
+      loadSubscriptions(subsFilter);
+    } catch (error) { toast.error('Failed to update subscriber'); }
+  };
+
+  const handleQuickPkg = async () => {
+    if (!quickPkgForm.name || !quickPkgForm.price) {
+      toast.error('Package name and price are required');
+      return;
+    }
+    try {
+      const res = await dataService.createISPPackage(quickPkgForm);
+      const newPkg = res.data;
+      await loadPackages();
+      setEditSubForm({ ...editSubForm, package_id: newPkg.id });
+      setShowQuickPkg(false);
+      setQuickPkgForm({ name: '', type: 'home', bandwidth_download: 0, bandwidth_upload: 0, bandwidth_unit: 'Mbps', price: 0, cost_price: 0, setup_fee: 0, billing_cycle: 'monthly', description: '' });
+      toast.success('Package created');
+    } catch (error) { toast.error('Failed to create package'); }
   };
 
   const savePayDate = async () => {
@@ -781,7 +825,28 @@ export default function ISP() {
                 <h2 className="text-lg font-semibold text-surface-900 dark:text-surface-50">{sd.customer?.company_name || sd.customer?.contact_person || 'Subscriber'}</h2>
                 <p className="text-xs text-surface-500">{sd.subscriber_code}</p>
               </div>
-              <button onClick={closeDetail} className="rounded-lg p-2 text-surface-400 hover:bg-surface-100"><X size={20} /></button>
+              <div className="flex items-center gap-2">
+                {editingSub ? (
+                  <>
+                    <button onClick={saveSubDetail} className="btn-primary text-xs py-1.5 px-3"><CheckCircle2 size={14} className="mr-1" />Save</button>
+                    <button onClick={() => setEditingSub(false)} className="btn-secondary text-xs py-1.5 px-3">Cancel</button>
+                  </>
+                ) : (
+                  <button onClick={() => {
+                    setEditSubForm({
+                      package_id: sd.package_id || '',
+                      connection_type: sd.connection_type || 'fiber',
+                      installation_address: sd.installation_address || '',
+                      static_ip: sd.static_ip || '',
+                      notes: sd.notes || '',
+                    });
+                    setEditingSub(true);
+                  }} className="btn-secondary text-xs py-1.5 px-3">
+                    <Pencil size={14} className="mr-1" />Edit
+                  </button>
+                )}
+                <button onClick={closeDetail} className="rounded-lg p-2 text-surface-400 hover:bg-surface-100"><X size={20} /></button>
+              </div>
             </div>
 
             <div className="flex border-b border-surface-200 dark:border-surface-700">
@@ -831,7 +896,35 @@ export default function ISP() {
                     </button>
                   </div>
 
-                  {sd.package && (
+                  {editingSub ? (
+                    <div>
+                      <label className="label text-xs mb-1">Package</label>
+                      <div className="flex gap-2">
+                        <select className="input flex-1" value={editSubForm.package_id} onChange={e => setEditSubForm({...editSubForm, package_id: e.target.value})}>
+                          <option value="">Select package</option>
+                          {packages.map(p => <option key={p.id} value={p.id}>{p.name} - {formatCurrency(p.price)}</option>)}
+                        </select>
+                        <button type="button" onClick={() => setShowQuickPkg(true)} className="btn-secondary text-xs whitespace-nowrap px-3 py-1.5" title="Add new package">
+                          <Plus size={14} className="mr-1" /> New
+                        </button>
+                      </div>
+                      {showQuickPkg && (
+                        <div className="mt-3 rounded-lg border border-accent-200 bg-accent-50 p-3 space-y-2 dark:border-accent-700 dark:bg-accent-900/20">
+                          <p className="text-xs font-semibold text-accent-700 dark:text-accent-300">Quick Add Package</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <input className="input text-xs" placeholder="Package name *" value={quickPkgForm.name} onChange={e => setQuickPkgForm({...quickPkgForm, name: e.target.value})} />
+                            <input type="number" className="input text-xs" placeholder="Price *" value={quickPkgForm.price || ''} onChange={e => setQuickPkgForm({...quickPkgForm, price: Number(e.target.value)})} />
+                            <input type="number" className="input text-xs" placeholder="Download Mbps" value={quickPkgForm.bandwidth_download || ''} onChange={e => setQuickPkgForm({...quickPkgForm, bandwidth_download: Number(e.target.value)})} />
+                            <input type="number" className="input text-xs" placeholder="Upload Mbps" value={quickPkgForm.bandwidth_upload || ''} onChange={e => setQuickPkgForm({...quickPkgForm, bandwidth_upload: Number(e.target.value)})} />
+                          </div>
+                          <div className="flex justify-end gap-2 pt-1">
+                            <button type="button" onClick={() => { setShowQuickPkg(false); setQuickPkgForm({ name: '', type: 'home', bandwidth_download: 0, bandwidth_upload: 0, bandwidth_unit: 'Mbps', price: 0, cost_price: 0, setup_fee: 0, billing_cycle: 'monthly', description: '' }); }} className="btn-secondary text-xs py-1 px-3">Cancel</button>
+                            <button type="button" onClick={handleQuickPkg} className="btn-primary text-xs py-1 px-3">Save Package</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : sd.package && (
                     <div className="rounded-lg border border-primary-200 bg-primary-50 p-4 dark:border-primary-800 dark:bg-primary-900/20">
                       <div className="flex items-center justify-between">
                         <div>
@@ -846,8 +939,14 @@ export default function ISP() {
                   <div className="grid grid-cols-2 gap-4">
                     <div><p className="text-xs text-surface-500">Customer</p><p className="text-sm font-medium">{sd.customer?.company_name || sd.customer?.contact_person || '-'}</p></div>
                     <div><p className="text-xs text-surface-500">Contact</p><p className="text-sm font-medium">{sd.customer?.phone || '-'}</p></div>
-                    <div><p className="text-xs text-surface-500">Connection Type</p><p className="text-sm font-medium capitalize">{sd.connection_type || '-'}</p></div>
-                    <div><p className="text-xs text-surface-500">Static IP</p><p className="text-sm font-mono text-xs">{sd.static_ip || '-'}</p></div>
+                    <div><p className="text-xs text-surface-500">Connection Type</p>{editingSub ? (
+                      <select className="input text-sm mt-0.5" value={editSubForm.connection_type} onChange={e => setEditSubForm({...editSubForm, connection_type: e.target.value})}>
+                        {connectionTypes.map(t => <option key={t} value={t}>{getStatusLabel(t)}</option>)}
+                      </select>
+                    ) : <p className="text-sm font-medium capitalize">{sd.connection_type || '-'}</p>}</div>
+                    <div><p className="text-xs text-surface-500">Static IP</p>{editingSub ? (
+                      <input className="input text-sm mt-0.5" value={editSubForm.static_ip} onChange={e => setEditSubForm({...editSubForm, static_ip: e.target.value})} placeholder="192.168.1.1" />
+                    ) : <p className="text-sm font-mono text-xs">{sd.static_ip || '-'}</p>}</div>
                     <div><p className="text-xs text-surface-500">Installation Date</p><p className="text-sm font-medium">{sd.installation_date ? formatDate(sd.installation_date) : '-'}</p></div>
                     <div>
                       <p className="text-xs text-surface-500">Next Payment Date</p>
@@ -866,14 +965,24 @@ export default function ISP() {
                     <div><p className="text-xs text-surface-500">Created</p><p className="text-sm font-medium">{formatDate(sd.created_at)}</p></div>
                   </div>
 
-                  {sd.installation_address && (
+                  {editingSub ? (
+                    <div>
+                      <p className="text-xs text-surface-500">Installation Address</p>
+                      <textarea className="input text-sm mt-0.5" rows={2} value={editSubForm.installation_address} onChange={e => setEditSubForm({...editSubForm, installation_address: e.target.value})} />
+                    </div>
+                  ) : sd.installation_address && (
                     <div>
                       <p className="text-xs text-surface-500">Installation Address</p>
                       <p className="text-sm text-surface-700 dark:text-surface-300">{sd.installation_address}</p>
                     </div>
                   )}
 
-                  {sd.notes && (
+                  {editingSub ? (
+                    <div>
+                      <p className="text-xs text-surface-500">Notes</p>
+                      <textarea className="input text-sm mt-0.5" rows={2} value={editSubForm.notes} onChange={e => setEditSubForm({...editSubForm, notes: e.target.value})} />
+                    </div>
+                  ) : sd.notes && (
                     <div>
                       <p className="text-xs text-surface-500">Notes</p>
                       <p className="text-sm text-surface-700 dark:text-surface-300">{sd.notes}</p>
