@@ -351,6 +351,10 @@ export const dataService = {
     const { data } = await api.delete(`/isp/monthly-collections/${id}`);
     return data;
   },
+  async sendISPBulkSms(body: { subscriber_ids: string[]; message: string }) {
+    const { data } = await api.post('/isp/send-bulk-sms', body);
+    return data;
+  },
   async downloadISPBillingPdf(billingId: string) {
     try {
       const token = localStorage.getItem('token');
@@ -691,6 +695,10 @@ export const dataService = {
   },
   async updateSettings(settings: CompanySettings) {
     const { data } = await api.put('/settings', { settings });
+    return data;
+  },
+  async getBeemSenderNames() {
+    const { data } = await api.get('/settings/beem-sender-names');
     return data;
   },
 

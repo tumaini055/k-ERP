@@ -430,6 +430,92 @@ router.get('/stats', checkPermission('isp', 'canView'), async (req: AuthRequest,
 });
 
 // ============================================
+// ISP BULK SMS
+// ============================================
+router.post('/send-bulk-sms', checkPermission('isp', 'canEdit'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { subscriber_ids, message, phone_overrides } = req.body;
+
+    if (!subscriber_ids?.length || !message) {
+      res.status(400).json({ error: 'subscriber_ids and message are required' });
+      return;
+    }
+
+    // Get subscribers with customer phone numbers
+    const { data: subscribers } = await supabase
+      .from('isp_subscribers')
+      .select('id, subscriber_code, customer:customers!isp_subscribers_customer_id_fkey(company_name, contact_person, phone)')
+      .in('id', subscriber_ids);
+
+    if (!subscribers || subscribers.length === 0) {
+      res.status(404).json({ error: 'No subscribers found' });
+      return;
+    }
+
+    // Get SMS config from company settings
+    const { data: cs } = await supabase
+      .from('company_settings')
+      .select('settings')
+      .eq('company_id', req.user!.company_id)
+      .single();
+
+    const settings = cs?.settings || {};
+    const apiKey = settings.beam_africa_api_key;
+    const secretKey = settings.beam_africa_secret_key || '';
+    const senderName = settings.beam_africa_sender_name || 'K-connect';
+
+    if (!apiKey) {
+      res.status(400).json({ error: 'Beam Africa API key not configured. Go to Settings to add it.' });
+      return;
+    }
+
+    // Collect valid phone numbers
+    const phoneNumbers: string[] = [];
+    const results: any[] = [];
+
+    for (const sub of subscribers) {
+      const cust = Array.isArray(sub.customer) ? sub.customer[0] : sub.customer;
+      let phone = phone_overrides?.[sub.id] || cust?.phone || '';
+      phone = phone.replace(/[^0-9]/g, '');
+      if (phone.startsWith('0')) phone = '255' + phone.slice(1);
+      if (!phone.startsWith('255')) phone = '255' + phone;
+      if (phone.length >= 10 && phone.length <= 15) {
+        phoneNumbers.push(phone);
+        results.push({ subscriber_code: sub.subscriber_code, customer: cust?.company_name || cust?.contact_person || '-', phone, status: 'pending' });
+      } else {
+        results.push({ subscriber_code: sub.subscriber_code, customer: cust?.company_name || cust?.contact_person || '-', phone: cust?.phone || '-', status: 'invalid_number' });
+      }
+    }
+
+    if (phoneNumbers.length === 0) {
+      res.status(400).json({ error: 'No valid phone numbers found' });
+      return;
+    }
+
+    // Send SMS via Beam Africa
+    const { sendBulkSms } = require('../utils/sms');
+    const result = await sendBulkSms(apiKey, secretKey, senderName, phoneNumbers, message);
+
+    for (const r of results) {
+      if (r.status === 'pending') r.status = 'sent';
+    }
+
+    res.json({
+      data: {
+        total: subscribers.length,
+        valid_phones: phoneNumbers.length,
+        sent: result.sent,
+        failed: result.failed,
+        errors: result.errors.slice(0, 10),
+        results,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to send SMS' });
+  }
+});
+
+// ============================================
 // ISP MONTHLY COLLECTIONS
 // ============================================
 router.get('/monthly-collections', checkPermission('isp', 'canView'), async (req: AuthRequest, res: Response) => {

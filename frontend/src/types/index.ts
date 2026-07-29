@@ -346,6 +346,9 @@ export interface CompanySettings {
   bank_name?: string;
   bank_account_name?: string;
   bank_account_number?: string;
+  beam_africa_api_key?: string;
+  beam_africa_sender_name?: string;
+  beam_africa_secret_key?: string;
 }
 
 export interface CalendarEvent {

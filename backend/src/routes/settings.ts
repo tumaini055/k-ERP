@@ -106,4 +106,35 @@ router.post('/upload-logo', checkPermission('settings', 'canEdit'), upload.singl
   }
 });
 
+router.get('/beem-sender-names', checkPermission('settings', 'canView'), async (req: AuthRequest, res: Response) => {
+  try {
+    const companyId = await resolveCompanyId(req.user!.id, req.user!.company_id);
+    if (!companyId) {
+      res.status(400).json({ error: 'No company assigned' });
+      return;
+    }
+
+    const { data: cs } = await supabase
+      .from('company_settings')
+      .select('settings')
+      .eq('company_id', companyId)
+      .single();
+
+    const settings = cs?.settings || {};
+    const apiKey = settings.beam_africa_api_key;
+    const secretKey = settings.beam_africa_secret_key || '';
+
+    if (!apiKey) {
+      res.status(400).json({ error: 'API key not configured' });
+      return;
+    }
+
+    const { getSenderNames } = require('../utils/sms');
+    const names = await getSenderNames(apiKey, secretKey);
+    res.json({ data: names });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to fetch sender names' });
+  }
+});
+
 export default router;

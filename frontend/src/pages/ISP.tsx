@@ -5,7 +5,7 @@ import { ISPSubscriber, ISPPackage, ISPBilling } from '../types';
 import { formatDate, formatCurrency, formatCurrencyFull, formatDateTime, getStatusLabel } from '../lib/utils';
 import {
   Wifi, Plus, Users, Signal, DollarSign, Search, X, RefreshCw,
-  Home, Building2, Globe, CheckCircle2, CreditCard, Download, Calendar, TrendingUp, ChevronDown, Bell,
+  Home, Building2, Globe, CheckCircle2, CreditCard, Download, Calendar, TrendingUp, ChevronDown, Bell, MessageSquare,
 } from 'lucide-react';
 
 const typeIcons: Record<string, any> = { home: Home, business: Building2, enterprise: Globe };
@@ -92,6 +92,16 @@ export default function ISP() {
     try { return JSON.parse(localStorage.getItem('isp_dismissed_notifs') || '[]'); } catch { return []; }
   });
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+  const [showBulkSms, setShowBulkSms] = useState(false);
+  const [bulkSmsTarget, setBulkSmsTarget] = useState('overdue');
+  const [bulkSmsMessage, setBulkSmsMessage] = useState('');
+  const [bulkSmsSending, setBulkSmsSending] = useState(false);
+  const [bulkSmsResult, setBulkSmsResult] = useState<any>(null);
+  const [showSingleSms, setShowSingleSms] = useState(false);
+  const [singleSmsSub, setSingleSmsSub] = useState<any>(null);
+  const [singleSmsMessage, setSingleSmsMessage] = useState('');
+  const [singleSmsPhone, setSingleSmsPhone] = useState('');
+  const [singleSmsSending, setSingleSmsSending] = useState(false);
 
   useEffect(() => {
     const params: any = { limit: 100 };
@@ -323,6 +333,14 @@ export default function ISP() {
     setShowBillingModal(true);
   };
 
+  const openSmsForSub = (sub: any) => {
+    setSingleSmsSub(sub);
+    setSingleSmsMessage(`Dear ${sub.customer?.company_name || sub.customer?.contact_person || 'Customer'}, your internet subscription (${sub.subscriber_code}) requires payment renewal. Please make payment to avoid service interruption. - K-connect`);
+    setSingleSmsPhone(sub.customer?.phone || '');
+    setSingleSmsSending(false);
+    setShowSingleSms(true);
+  };
+
   const handleCreateBill = async () => {
     if (!billForm.amount || !selectedSub) return;
     try {
@@ -443,6 +461,9 @@ export default function ISP() {
               </div>
             )}
           </div>
+          <button onClick={() => setShowBulkSms(true)} className="btn-secondary">
+            <MessageSquare size={16} className="mr-1" /> Bulk SMS
+          </button>
           <button onClick={() => { loadData(); loadPackages(); loadStats(); }} className="btn-secondary">
             <RefreshCw size={16} className="mr-1" /> Refresh
           </button>
@@ -713,13 +734,14 @@ export default function ISP() {
               <th>Status</th>
               <th>Since</th>
               <th>Subs</th>
+              <th className="text-center">Action</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={9} className="text-center py-12"><RefreshCw size={20} className="mx-auto animate-spin text-surface-400" /></td></tr>
+              <tr><td colSpan={10} className="text-center py-12"><RefreshCw size={20} className="mx-auto animate-spin text-surface-400" /></td></tr>
             ) : subscribers.length === 0 ? (
-              <tr><td colSpan={9} className="text-center py-12 text-surface-400">No subscribers found</td></tr>
+              <tr><td colSpan={10} className="text-center py-12 text-surface-400">No subscribers found</td></tr>
             ) : (
               subscribers.map((sub) => (
                 <tr key={sub.id} className="cursor-pointer" onClick={() => openSubDetail(sub)}>
@@ -737,6 +759,11 @@ export default function ISP() {
                     ) : (
                       <span className="text-surface-300">1</span>
                     )}
+                  </td>
+                  <td className="text-center">
+                    <button onClick={(e) => { e.stopPropagation(); openSmsForSub(sub); }} className="btn-secondary text-[10px] py-1 px-1.5" title="Send SMS">
+                      <MessageSquare size={12} />
+                    </button>
                   </td>
                 </tr>
               ))
@@ -798,6 +825,9 @@ export default function ISP() {
                       setShowBillingModal(true);
                     }} className="btn-primary text-xs py-1.5 px-3">
                       <CreditCard size={14} className="mr-1" /> Create Invoice
+                    </button>
+                    <button onClick={() => openSmsForSub(sd)} className="btn-secondary text-xs py-1.5 px-3">
+                      <MessageSquare size={14} className="mr-1" /> SMS
                     </button>
                   </div>
 
@@ -1251,6 +1281,187 @@ export default function ISP() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Single SMS Modal */}
+      {showSingleSms && singleSmsSub && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl dark:bg-surface-800">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-semibold flex items-center gap-2"><MessageSquare size={18} className="text-primary-500" /> Send SMS</h2>
+              <button onClick={() => setShowSingleSms(false)} className="rounded-lg p-2 text-surface-400 hover:bg-surface-100"><X size={20} /></button>
+            </div>
+            <div className="space-y-4">
+              <div className="rounded-lg bg-surface-50 dark:bg-surface-700/50 p-3">
+                <p className="text-xs text-surface-500">To:</p>
+                <p className="text-sm font-medium">{singleSmsSub.customer?.company_name || singleSmsSub.customer?.contact_person || '-'} ({singleSmsSub.subscriber_code})</p>
+                <input className="input text-xs mt-1 w-full" placeholder="Phone number (e.g. 255712345678)" value={singleSmsPhone} onChange={e => setSingleSmsPhone(e.target.value)} />
+              </div>
+              <div>
+                <label className="label">Message <span className="text-surface-400 font-normal">({singleSmsMessage.length} chars, {Math.ceil(singleSmsMessage.length / 160)} segment{Math.ceil(singleSmsMessage.length / 160) > 1 ? 's' : ''})</span></label>
+                <textarea className="input w-full" rows={4} value={singleSmsMessage} onChange={e => setSingleSmsMessage(e.target.value)} />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button onClick={() => setShowSingleSms(false)} className="btn-secondary">Cancel</button>
+                <button
+                  onClick={async () => {
+                    if (!singleSmsMessage.trim()) { toast.error('Enter a message'); return; }
+                    setSingleSmsSending(true);
+                    try {
+                      const payload: any = { subscriber_ids: [singleSmsSub.id], message: singleSmsMessage };
+                      if (singleSmsPhone.trim()) payload.phone_overrides = { [singleSmsSub.id]: singleSmsPhone.trim() };
+                      const res = await dataService.sendISPBulkSms(payload);
+                      if (res.data?.sent > 0) {
+                        toast.success('SMS sent successfully');
+                        setShowSingleSms(false);
+                      } else {
+                        toast.error(res.data?.errors?.[0] || 'Failed to send SMS');
+                      }
+                    } catch (error: any) {
+                      toast.error(error?.response?.data?.error || 'Failed to send SMS');
+                    }
+                    setSingleSmsSending(false);
+                  }}
+                  disabled={singleSmsSending || !singleSmsMessage.trim()}
+                  className="btn-primary"
+                >
+                  {singleSmsSending ? <RefreshCw size={14} className="animate-spin mr-1" /> : <MessageSquare size={14} className="mr-1" />}
+                  {singleSmsSending ? 'Sending...' : 'Send SMS'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk SMS Modal */}
+      {showBulkSms && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl dark:bg-surface-800 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold flex items-center gap-2"><MessageSquare size={18} className="text-primary-500" /> Bulk SMS</h2>
+              <button onClick={() => { setShowBulkSms(false); setBulkSmsResult(null); setBulkSmsMessage(''); }} className="rounded-lg p-2 text-surface-400 hover:bg-surface-100"><X size={20} /></button>
+            </div>
+
+            {!bulkSmsResult ? (
+              <div className="space-y-5">
+                <div>
+                  <label className="label">Target Subscribers</label>
+                  <select className="input" value={bulkSmsTarget} onChange={e => setBulkSmsTarget(e.target.value)}>
+                    <option value="overdue">Overdue (past paid_through_date)</option>
+                    <option value="expiring7">Expiring within 7 days</option>
+                    <option value="expiring30">Expiring within 30 days</option>
+                    <option value="expiring90">Expiring within 90 days</option>
+                    <option value="all_active">All Active</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Message <span className="text-surface-400 font-normal">({bulkSmsMessage.length} chars)</span></label>
+                  <textarea
+                    className="input w-full"
+                    rows={5}
+                    placeholder="Dear customer, your internet subscription is about to expire. Please make payment to avoid service interruption. - K-connect"
+                    value={bulkSmsMessage}
+                    onChange={e => setBulkSmsMessage(e.target.value)}
+                  />
+                  <div className="mt-1.5 flex items-center justify-between text-xs text-surface-400">
+                    <span>Use {'{name}'} for customer name and {'{code}'} for subscriber code</span>
+                    <span className={bulkSmsMessage.length > 160 ? 'text-red-500 font-medium' : ''}>
+                      {Math.ceil(bulkSmsMessage.length / 160)} SMS segment{Math.ceil(bulkSmsMessage.length / 160) > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                </div>
+                <div className="bg-surface-50 dark:bg-surface-700/50 rounded-lg p-3">
+                  <p className="text-xs font-medium text-surface-500 mb-1">Preview:</p>
+                  <p className="text-sm text-surface-700 dark:text-surface-300 bg-white dark:bg-surface-800 rounded p-2 border border-surface-200 dark:border-surface-600">
+                    {bulkSmsMessage.replace('{name}', '[Customer]').replace('{code}', '[ISP-XXXXXX]') || 'Your message will appear here'}
+                  </p>
+                </div>
+                <div className="flex justify-end gap-3 pt-2">
+                  <button onClick={() => { setShowBulkSms(false); setBulkSmsResult(null); setBulkSmsMessage(''); }} className="btn-secondary">Cancel</button>
+                  <button onClick={async () => {
+                    if (!bulkSmsMessage.trim()) { toast.error('Enter a message'); return; }
+                    setBulkSmsSending(true);
+                    try {
+                      let subscriberIds: string[] = [];
+                      const now = new Date();
+                      const todayStr = now.toISOString().split('T')[0];
+
+                      if (bulkSmsTarget === 'overdue') {
+                        const { data } = await dataService.getISPSubscribers({ limit: 1000 });
+                        subscriberIds = (data || [])
+                          .filter((s: any) => s.paid_through_date && s.paid_through_date < todayStr && s.service_status === 'active')
+                          .map((s: any) => s.id);
+                      } else if (bulkSmsTarget === 'all_active') {
+                        const { data } = await dataService.getISPSubscribers({ status: 'active', limit: 1000 });
+                        subscriberIds = (data || []).map((s: any) => s.id);
+                      } else {
+                        const days = parseInt(bulkSmsTarget.replace('expiring', ''));
+                        const { data } = await dataService.getISPSubscriptions({ ending_within_days: days });
+                        subscriberIds = (data || []).filter((s: any) => s.service_status === 'active').map((s: any) => s.id);
+                      }
+
+                      if (subscriberIds.length === 0) {
+                        toast.error('No subscribers match the selected filter');
+                        setBulkSmsSending(false);
+                        return;
+                      }
+
+                      const res = await dataService.sendISPBulkSms({ subscriber_ids: subscriberIds, message: bulkSmsMessage });
+                      setBulkSmsResult(res.data);
+                      toast.success(`SMS sent to ${res.data.sent} subscribers`);
+                    } catch (error: any) {
+                      toast.error(error?.response?.data?.error || 'Failed to send SMS');
+                    }
+                    setBulkSmsSending(false);
+                  }} disabled={bulkSmsSending || !bulkSmsMessage.trim()} className="btn-primary">
+                    {bulkSmsSending ? <RefreshCw size={14} className="animate-spin mr-1" /> : <MessageSquare size={14} className="mr-1" />}
+                    {bulkSmsSending ? 'Sending...' : 'Send SMS'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="rounded-lg bg-surface-50 dark:bg-surface-700/50 p-4">
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div><p className="text-2xl font-bold text-primary-600">{bulkSmsResult.total}</p><p className="text-xs text-surface-500">Total</p></div>
+                    <div><p className="text-2xl font-bold text-emerald-600">{bulkSmsResult.sent}</p><p className="text-xs text-surface-500">Sent</p></div>
+                    <div><p className={`text-2xl font-bold ${bulkSmsResult.failed > 0 ? 'text-red-500' : 'text-surface-400'}`}>{bulkSmsResult.failed}</p><p className="text-xs text-surface-500">Failed</p></div>
+                  </div>
+                </div>
+                {bulkSmsResult.errors?.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-red-500 mb-1">Errors:</p>
+                    <div className="max-h-32 overflow-y-auto space-y-1">
+                      {bulkSmsResult.errors.map((e: string, i: number) => (
+                        <p key={i} className="text-xs text-red-400 bg-red-50 dark:bg-red-900/20 rounded px-2 py-1">{e}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {bulkSmsResult.results?.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-surface-500 mb-1">Recipients:</p>
+                    <div className="max-h-48 overflow-y-auto space-y-1">
+                      {bulkSmsResult.results.slice(0, 50).map((r: any, i: number) => (
+                        <div key={i} className="flex items-center justify-between text-xs bg-surface-50 dark:bg-surface-700/50 rounded px-2 py-1.5">
+                          <span className="font-mono text-surface-500">{r.subscriber_code}</span>
+                          <span className="text-surface-700 dark:text-surface-300 truncate mx-2">{r.customer}</span>
+                          <span className="text-surface-400">{r.phone}</span>
+                          <span className={r.status === 'sent' ? 'text-emerald-600 font-medium' : 'text-red-500'}>{r.status}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="flex justify-end gap-3 pt-2">
+                  <button onClick={() => { setShowBulkSms(false); setBulkSmsResult(null); setBulkSmsMessage(''); }} className="btn-secondary">Close</button>
+                  <button onClick={() => setBulkSmsResult(null)} className="btn-primary"><MessageSquare size={14} className="mr-1" /> Send Another</button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

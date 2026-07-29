@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { dataService } from '../services/dataService';
 import { CompanySettings } from '../types';
-import { Save, Building2, Receipt, Globe, RefreshCw, Plus, Pencil, Trash2, X, Check, Upload, Landmark } from 'lucide-react';
+import { Save, Building2, Receipt, Globe, RefreshCw, Plus, Pencil, Trash2, X, Check, Upload, Landmark, MessageSquare } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-type Tab = 'company' | 'departments' | 'positions';
+type Tab = 'company' | 'departments' | 'positions' | 'sms';
 
 export default function Settings() {
   const [tab, setTab] = useState<Tab>('company');
@@ -23,6 +23,8 @@ export default function Settings() {
   const [newPos, setNewPos] = useState({ name: '', department_id: '', description: '' });
   const [editingPos, setEditingPos] = useState<string | null>(null);
   const [editPosForm, setEditPosForm] = useState({ name: '', department_id: '', description: '' });
+  const [senderNames, setSenderNames] = useState<any[]>([]);
+  const [loadingSenders, setLoadingSenders] = useState(false);
 
   useEffect(() => {
     fetchSettings();
@@ -150,6 +152,7 @@ export default function Settings() {
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'company', label: 'Company Info' },
+    { key: 'sms', label: 'SMS' },
     { key: 'departments', label: 'Departments' },
     { key: 'positions', label: 'Positions' },
   ];
@@ -358,6 +361,74 @@ export default function Settings() {
           </div>
 
           <div className="flex justify-end gap-3 pb-8">
+            <button type="submit" disabled={saving} className="btn-primary">
+              <Save size={18} className="mr-1.5" />
+              {saving ? 'Saving...' : 'Save Settings'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {tab === 'sms' && (
+        <form onSubmit={handleSave} className="space-y-6 max-w-3xl">
+          {saved && (
+            <div className="rounded-lg bg-accent-50 px-4 py-3 text-sm text-accent-700 border border-accent-200">
+              Settings saved successfully.
+            </div>
+          )}
+          <div className="card">
+            <div className="mb-5 flex items-center gap-2">
+              <MessageSquare size={20} className="text-primary-600" />
+              <h2 className="text-base font-semibold text-surface-900 dark:text-surface-50">SMS Configuration (Beem Africa)</h2>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">Beem Africa API Key *</label>
+                <input className="input" type="password" placeholder="Enter your Beem Africa API key" value={settings.beam_africa_api_key || ''} onChange={e => setSettings({...settings, beam_africa_api_key: e.target.value})} />
+                <p className="text-xs text-surface-400 mt-1">Get from your Beem Africa dashboard</p>
+              </div>
+              <div>
+                <label className="label">Secret Key</label>
+                <input className="input" type="password" placeholder="Enter your Beem Africa secret key" value={settings.beam_africa_secret_key || ''} onChange={e => setSettings({...settings, beam_africa_secret_key: e.target.value})} />
+                <p className="text-xs text-surface-400 mt-1">Required for Basic Auth</p>
+              </div>
+              <div>
+                <label className="label">Sender Name *</label>
+                <input className="input" placeholder="e.g. K-connect (max 11 chars)" value={settings.beam_africa_sender_name || ''} onChange={e => setSettings({...settings, beam_africa_sender_name: e.target.value})} />
+                <p className="text-xs text-surface-400 mt-1">Must be registered with Beem Africa (max 11 characters)</p>
+              </div>
+            </div>
+            <div className="mt-4">
+              <button type="button" onClick={async () => {
+                setLoadingSenders(true);
+                try {
+                  const res = await dataService.getBeemSenderNames();
+                  setSenderNames(res.data || []);
+                } catch (error: any) {
+                  toast.error(error?.response?.data?.error || 'Failed to load sender names');
+                }
+                setLoadingSenders(false);
+              }} disabled={loadingSenders} className="btn-secondary text-xs py-1.5 px-3">
+                {loadingSenders ? <RefreshCw size={14} className="animate-spin mr-1" /> : <RefreshCw size={14} className="mr-1" />}
+                Load Sender Names
+              </button>
+              {senderNames.length > 0 && (
+                <div className="mt-3 rounded-lg border border-surface-200 dark:border-surface-600 overflow-hidden">
+                  <div className="max-h-40 overflow-y-auto divide-y divide-surface-200 dark:divide-surface-600">
+                    {senderNames.map((sn, i) => (
+                      <div key={i} className="flex items-center justify-between px-3 py-2 text-sm">
+                        <span className="font-medium text-surface-700 dark:text-surface-200">{sn.name}</span>
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${sn.status === 'approved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'}`}>
+                          {sn.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="flex justify-end">
             <button type="submit" disabled={saving} className="btn-primary">
               <Save size={18} className="mr-1.5" />
               {saving ? 'Saving...' : 'Save Settings'}
