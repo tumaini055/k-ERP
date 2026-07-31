@@ -8,6 +8,45 @@ const router = Router();
 
 router.use(authenticate);
 
+function numberToWords(value: number): string {
+  const ones = ['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+    'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  const scales = ['', 'Thousand', 'Million', 'Billion', 'Trillion'];
+  const underHundred = (n: number): string => {
+    if (n < 20) return ones[n];
+    const t = Math.floor(n / 10);
+    const o = n % 10;
+    return tens[t] + (o ? ` ${ones[o]}` : '');
+  };
+  if (value === 0) return 'Zero';
+  const abs = Math.abs(value);
+  const cents = Math.round((abs - Math.floor(abs)) * 100);
+  let whole = Math.floor(abs);
+  const parts: string[] = [];
+  let scaleIdx = 0;
+  while (whole > 0) {
+    const chunk = whole % 1000;
+    if (chunk > 0) {
+      const h = Math.floor(chunk / 100);
+      const rem = chunk % 100;
+      let chunkText = '';
+      if (h > 0) {
+        chunkText += `${ones[h]} Hundred`;
+        if (rem > 0) chunkText += ` and ${underHundred(rem)}`;
+      } else {
+        chunkText += underHundred(rem);
+      }
+      if (scales[scaleIdx]) chunkText += ` ${scales[scaleIdx]}`;
+      parts.unshift(chunkText);
+    }
+    whole = Math.floor(whole / 1000);
+    scaleIdx++;
+  }
+  const wholeText = parts.join(' ');
+  return cents > 0 ? `${wholeText} and ${cents}/100` : wholeText;
+}
+
 async function resolveCompanyId(userId: string, currentCompanyId?: string): Promise<string | null> {
   if (currentCompanyId) return currentCompanyId;
   const { data: company } = await supabase.from('companies').select('id').limit(1).single();
@@ -397,9 +436,429 @@ router.get('/invoices/:id/pdf', checkPermission('finance', 'canView'), async (re
     doc.text(footerParts.join('  |  '), lm, footY + 3, { align: 'center', width: pw });
     doc.text(`${docType} #${invoice.invoice_number}  |  Generated ${new Date().toLocaleDateString('en-GB')}`, lm, footY + 16, { align: 'center', width: pw });
 
+    try { const s = doc.openImage(path.join(__dirname, '../../uploads/stamp.png')); const ss = Math.min(120 / s.width, 120 / s.height); const sw = s.width * ss, sh = s.height * ss; doc.save(); doc.translate(doc.page.width - 50 - sw, footY - 16 - sh); doc.rotate(-6, { origin: [sw / 2, sh / 2] }); doc.image(s, 0, 0, { width: sw, height: sh }); doc.restore(); } catch (_) {}
     doc.end();
   } catch (error) {
     res.status(500).json({ error: 'Failed to generate invoice PDF' });
+  }
+});
+
+// ============================================
+// OFFICIAL RECEIPT PDF (generated for paid invoices)
+// ============================================
+router.get('/invoices/:id/receipt', checkPermission('finance', 'canView'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { data: invoice } = await supabase
+      .from('invoices')
+      .select('*, customer:customers!invoices_customer_id_fkey(company_name, contact_person, email, phone, address)')
+      .eq('id', req.params.id)
+      .single();
+
+    if (!invoice) {
+      res.status(404).json({ error: 'Invoice not found' });
+      return;
+    }
+
+    const balance = Number(invoice.total_amount || 0) - Number(invoice.paid_amount || 0);
+    if (balance > 0) {
+      res.status(400).json({ error: 'Receipt can only be generated for fully paid invoices' });
+      return;
+    }
+
+    const { data: items } = await supabase
+      .from('invoice_items')
+      .select('*')
+      .eq('invoice_id', req.params.id)
+      .order('sort_order');
+
+    const { data: payments } = await supabase
+      .from('payments')
+      .select('*, receiver:users!payments_received_by_fkey(first_name, last_name)')
+      .eq('invoice_id', req.params.id)
+      .order('payment_date', { ascending: true });
+
+    // Company branding
+    let companyName = 'K-Connect Technologies';
+    let companyEmail = 'info@kconnect.co.tz';
+    let companyWebsite = 'www.kconnect.co.tz';
+    let companyAddress = '';
+    let companyPhone = '';
+    let taxId = '';
+    let logoUrl = '';
+    let currencySymbol = 'TSh ';
+    let bankName = '';
+    let bankAccountName = '';
+    let bankAccountNumber = '';
+    const companyId = await resolveCompanyId(req.user!.id, req.user?.company_id);
+    if (companyId) {
+      const { data: cs } = await supabase
+        .from('company_settings')
+        .select('settings')
+        .eq('company_id', companyId)
+        .single();
+      if (cs?.settings) {
+        const s = cs.settings;
+        if (s.company_name) companyName = s.company_name;
+        if (s.company_email) companyEmail = s.company_email;
+        if (s.company_website) companyWebsite = s.company_website;
+        if (s.company_address) companyAddress = s.company_address;
+        if (s.company_phone) companyPhone = s.company_phone;
+        if (s.tax_id) taxId = s.tax_id;
+        if (s.logo_url) logoUrl = s.logo_url;
+        if (s.bank_name) bankName = s.bank_name;
+        if (s.bank_account_name) bankAccountName = s.bank_account_name;
+        if (s.bank_account_number) bankAccountNumber = s.bank_account_number;
+        if (s.currency === 'USD') currencySymbol = '$ ';
+        else if (s.currency === 'EUR') currencySymbol = '€ ';
+        else if (s.currency === 'GBP') currencySymbol = '£ ';
+        else if (s.currency === 'KES' || s.currency === 'UGX') currencySymbol = `${s.currency} `;
+        else currencySymbol = 'TSh ';
+      }
+    }
+
+    const totalPaid = (payments || []).reduce((s: number, p: any) => s + Number(p.amount), 0);
+    const receiptNumber = (invoice.invoice_number || '').replace(/^INV-/i, 'RCT-') || `RCT-${Date.now()}`;
+
+    // Cryptographic verification code so a receipt can be authenticated
+    const crypto = require('crypto');
+    const verifySource = `${receiptNumber}|${invoice.invoice_number}|${Number(invoice.total_amount).toFixed(2)}|${totalPaid.toFixed(2)}|${invoice.customer?.company_name || ''}|${invoice.issue_date}`;
+    const verifyHash = crypto.createHash('sha256').update(verifySource).digest('hex').toUpperCase();
+    const verifyCode = `${verifyHash.slice(0, 4)}-${verifyHash.slice(4, 8)}-${verifyHash.slice(8, 12)}-${verifyHash.slice(12, 16)}`;
+
+    const PDFDocument = require('pdfkit');
+    const doc = new PDFDocument({ margin: 45, size: 'A4' });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="receipt-${receiptNumber}.pdf"`);
+    doc.pipe(res);
+
+    const pw = doc.page.width - 90;
+    const lm = 45;
+    const rm = doc.page.width - 45;
+    const green = '#059669';
+    const greenDark = '#065f46';
+    const greenLight = '#ecfdf5';
+    const greenBorder = '#a7f3d0';
+    const fmt = (n: number) => `${currencySymbol}${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+    let y = 0;
+
+    // ============================================
+    // TOP GREEN BANNER
+    // ============================================
+    doc.rect(0, 0, doc.page.width, 48).fill(green);
+    doc.fillColor('#fff').fontSize(18).font('Helvetica-Bold').text('OFFICIAL RECEIPT', lm, 14, { align: 'center', width: pw });
+
+    y = 62;
+
+    // PAID IN FULL badge
+    doc.roundedRect(lm, y, 118, 22, 11).fill('#d1fae5');
+    doc.fillColor(greenDark).fontSize(10).font('Helvetica-Bold').text('PAID IN FULL', lm, y + 6, { width: 118, align: 'center' });
+    y += 34;
+
+    // ============================================
+    // HEADER: Logo + Company Info (left) / Receipt ref (right)
+    // ============================================
+    const addrParts = companyAddress ? companyAddress.split(',').map((s: string) => s.trim()) : [];
+    const addrLine1 = addrParts.length > 0 ? addrParts[0] : '';
+    const addrLine2 = addrParts.length > 1 ? addrParts.slice(1).join(', ') : '';
+
+    let logoWidth = 0;
+    let logoHeight = 0;
+    const logoY = y;
+    if (logoUrl) {
+      try {
+        const logoPath = logoUrl.startsWith('/uploads') ? path.join(__dirname, '../..', logoUrl) : logoUrl;
+        const img = doc.openImage(logoPath);
+        const maxLogoW = 68;
+        const maxLogoH = 58;
+        const scale = Math.min(maxLogoW / img.width, maxLogoH / img.height);
+        logoWidth = img.width * scale;
+        logoHeight = img.height * scale;
+        doc.image(img, lm, logoY, { width: logoWidth, height: logoHeight });
+      } catch (_e) { /* skip */ }
+    }
+
+    const refBoxW = 210;
+    const refBoxX = rm - refBoxW;
+    const ciX = logoWidth > 0 ? lm + logoWidth + 14 : lm;
+    const ciY = logoWidth > 0 ? logoY + 2 : logoY;
+    const maxCiWidth = refBoxX - ciX - 14;
+
+    doc.fontSize(15).font('Helvetica-Bold').fillColor('#111827').text(companyName, ciX, ciY, { width: maxCiWidth });
+    const nameH = doc.heightOfString(companyName, { width: maxCiWidth });
+    let ciBottom = ciY + nameH + 6;
+
+    doc.fontSize(8.5).font('Helvetica').fillColor('#4b5563');
+    const ciLines: string[] = [];
+    if (addrLine1) ciLines.push(addrLine1);
+    if (addrLine2) ciLines.push(addrLine2);
+    if (companyPhone) ciLines.push(companyPhone);
+    if (companyEmail) ciLines.push(companyEmail);
+    if (taxId) ciLines.push(`TIN: ${taxId}`);
+
+    for (const line of ciLines) {
+      doc.text(line, ciX, ciBottom, { width: maxCiWidth });
+      ciBottom += Math.max(doc.heightOfString(line, { width: maxCiWidth }), 11) + 2;
+    }
+
+    const leftEndY = Math.max(ciBottom, logoY + (logoHeight || 0) + 5);
+
+    // Right: Receipt reference box
+    const refBoxY = y;
+    const refPad = 8;
+    const refInnerW = refBoxW - refPad * 2;
+    doc.rect(refBoxX, refBoxY, refBoxW, 64).fill(greenLight).strokeColor(green).lineWidth(0.5).stroke();
+    doc.fillColor(green).fontSize(9).font('Helvetica-Bold').text('RECEIPT NO', refBoxX + refPad, refBoxY + 6, { width: refInnerW });
+    doc.fillColor('#111827').font('Helvetica').fontSize(10).text(receiptNumber, refBoxX + refPad, refBoxY + 19, { width: refInnerW });
+    doc.fillColor('#6b7280').fontSize(8);
+    let refRowY = refBoxY + 36;
+    if (invoice.invoice_number) {
+      doc.text(`Invoice: ${invoice.invoice_number}`, refBoxX + refPad, refRowY, { width: refInnerW });
+      refRowY += 11;
+    }
+    const lastPayment = (payments || []).slice(-1)[0] as any;
+    const receiptDate = lastPayment?.payment_date || invoice.issue_date;
+    doc.text(`Date: ${new Date(receiptDate).toLocaleDateString('en-GB')}`, refBoxX + refPad, refRowY, { width: refInnerW });
+    refRowY += 11;
+    if (taxId) doc.text(`TIN: ${taxId}`, refBoxX + refPad, refRowY, { width: refInnerW });
+
+    const rightEndY = refBoxY + 64;
+    y = Math.max(leftEndY, rightEndY) + 16;
+
+    // ============================================
+    // BILL TO (RECEIVED FROM)
+    // ============================================
+    const customerName = invoice.customer
+      ? (invoice.customer.company_name || invoice.customer.contact_person || '\u2014')
+      : '\u2014';
+
+    doc.fontSize(9).font('Helvetica-Bold').fillColor(greenDark).text('PAID BY / BILL TO', lm, y);
+    y += 14;
+    doc.font('Helvetica').fillColor('#4b5563').fontSize(8.5);
+    doc.text(customerName, lm, y);
+    y += 12;
+    if (invoice.customer?.email) {
+      doc.text(invoice.customer.email, lm, y);
+      y += 12;
+    }
+    if (invoice.customer?.phone) {
+      doc.text(invoice.customer.phone, lm, y);
+      y += 12;
+    }
+    if (invoice.customer?.address) {
+      const addrH = doc.heightOfString(invoice.customer.address, { width: 200 });
+      doc.text(invoice.customer.address, lm, y, { width: 200 });
+      y += Math.max(addrH, 12);
+    }
+
+    y += 10;
+
+    // ============================================
+    // PAYMENT DETAILS BOX
+    // ============================================
+    const payBoxTop = y;
+    const payBoxH = 46;
+    doc.rect(lm, payBoxTop, pw, payBoxH).fill(greenLight).strokeColor(greenBorder).lineWidth(0.5).stroke();
+    doc.fontSize(8.5).font('Helvetica').fillColor('#065f46');
+    const payColX = lm + 12;
+    const payColW = (pw - 24) / 4;
+    doc.font('Helvetica-Bold').fontSize(8).fillColor(greenDark);
+    const payHeaders = ['PAYMENT METHOD', 'REFERENCE NO', 'DATE RECEIVED', 'RECEIVED BY'];
+    payHeaders.forEach((h, i) => doc.text(h, payColX + i * payColW, payBoxTop + 8, { width: payColW - 6 }));
+    const methodLabels: Record<string, string> = {
+      cash: 'Cash', bank_transfer: 'Bank Transfer', mobile_money: 'Mobile Money', cheque: 'Cheque', card: 'Card',
+    };
+    const method = (payments && payments[0]) ? (methodLabels[(payments[0] as any).payment_method] || (payments[0] as any).payment_method) : '\u2014';
+    const reference = (payments && payments[0]) ? ((payments[0] as any).reference_number || '\u2014') : '\u2014';
+    const receiver = (payments && payments[0]) ? ((payments[0] as any).receiver ? `${(payments[0] as any).receiver.first_name} ${(payments[0] as any).receiver.last_name}` : req.user ? `${req.user.first_name} ${req.user.last_name}` : '\u2014') : '\u2014';
+    doc.font('Helvetica').fillColor('#111827').fontSize(8.5);
+    doc.text(method, payColX, payBoxTop + 24, { width: payColW - 6 });
+    doc.text(String(reference), payColX + payColW, payBoxTop + 24, { width: payColW - 6 });
+    doc.text(new Date(receiptDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }), payColX + payColW * 2, payBoxTop + 24, { width: payColW - 6 });
+    doc.text(receiver, payColX + payColW * 3, payBoxTop + 24, { width: payColW - 6 });
+    y = payBoxTop + payBoxH + 14;
+
+    // ============================================
+    // ITEMS TABLE
+    // ============================================
+    const tableTop = y;
+    const colW = [18, 260, 38, 90, 95];
+    const colX = [lm];
+    for (let i = 1; i < colW.length; i++) colX[i] = colX[i - 1] + colW[i - 1];
+    const tableWidth = colW.reduce((s, w) => s + w, 0);
+    const headerH = 22;
+    const rowH = 19;
+
+    const headerTexts = ['SN', 'DESCRIPTION', 'QTY', 'UNIT PRICE', 'TOTAL PRICE'];
+    const headerAligns: ('left' | 'right')[] = ['left', 'left', 'left', 'right', 'right'];
+
+    doc.roundedRect(colX[0], tableTop, tableWidth, headerH, 2).fill(green);
+    doc.fillColor('#fff').fontSize(9).font('Helvetica-Bold');
+    for (let i = 0; i < headerTexts.length; i++) {
+      doc.text(headerTexts[i], colX[i], tableTop + 6, { width: colW[i], align: headerAligns[i] });
+    }
+
+    y = tableTop + headerH;
+    doc.fontSize(8.5).font('Helvetica').fillColor('#374151');
+    let grandTotal = 0;
+    if (items) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const itemTotal = Number(item.total_price || 0);
+        grandTotal += itemTotal;
+
+        if (i % 2 === 0) doc.rect(colX[0], y, tableWidth, rowH).fill('#f9fafb');
+        doc.fillColor('#374151');
+        doc.text(String(i + 1), colX[0], y + 5, { width: colW[0], align: 'center' });
+        doc.text(item.description || '\u2014', colX[1] + 4, y + 5, { width: colW[1] - 8, align: 'left' });
+        doc.text(String(item.quantity), colX[2], y + 5, { width: colW[2], align: 'center' });
+        doc.text(`${currencySymbol}${Number(item.unit_price).toLocaleString('en-US', { minimumFractionDigits: 2 })}`, colX[3], y + 5, { width: colW[3], align: 'right' });
+        doc.text(`${currencySymbol}${itemTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}`, colX[4], y + 5, { width: colW[4], align: 'right' });
+        y += rowH;
+
+        if (y > 700) {
+          doc.moveTo(colX[0], y).lineTo(colX[0] + tableWidth, y).strokeColor('#e5e7eb').lineWidth(0.5).stroke();
+          doc.addPage();
+          y = 45;
+          doc.roundedRect(colX[0], y, tableWidth, headerH, 2).fill(green);
+          doc.fillColor('#fff').fontSize(9).font('Helvetica-Bold');
+          for (let j = 0; j < headerTexts.length; j++) {
+            doc.text(headerTexts[j], colX[j], y + 6, { width: colW[j], align: headerAligns[j] });
+          }
+          y += headerH;
+          doc.fontSize(8.5).font('Helvetica').fillColor('#374151');
+        }
+      }
+    }
+
+    doc.moveTo(colX[0], y).lineTo(colX[0] + tableWidth, y).strokeColor('#d1d5db').lineWidth(0.5).stroke();
+    y += 6;
+
+    // ============================================
+    // SUMMARY (right-aligned)
+    // ============================================
+    const sumX = colX[3];
+    const sumW = colW[3] + colW[4];
+    const summaryRows: { label: string; value: string; bold?: boolean }[] = [];
+    if (Number(invoice.subtotal) > 0) summaryRows.push({ label: 'Subtotal', value: fmt(invoice.subtotal) });
+    if (Number(invoice.tax_rate) > 0) summaryRows.push({ label: `Tax (${invoice.tax_rate}%)`, value: fmt(invoice.tax_amount) });
+    if (Number(invoice.discount_amount) > 0) summaryRows.push({ label: 'Discount', value: `-${fmt(invoice.discount_amount)}` });
+
+    const summaryH = summaryRows.length * 16;
+    const grandBoxH = 30;
+    const totalSummaryH = summaryH + grandBoxH + 6;
+
+    if (y + totalSummaryH + 260 > doc.page.height - 45) {
+      doc.addPage();
+      y = 45;
+    }
+
+    doc.rect(sumX, y, sumW, totalSummaryH).fill('#f9fafb');
+    for (const row of summaryRows) {
+      doc.font('Helvetica').fillColor('#4b5563');
+      doc.text(row.label, sumX + 8, y + 4, { width: 80 });
+      doc.text(row.value, sumX + 8, y + 4, { width: sumW - 16, align: 'right' });
+      y += 16;
+    }
+
+    y += 3;
+    doc.roundedRect(sumX + 2, y, sumW - 4, grandBoxH, 3).fill(green);
+    doc.fillColor('#fff').fontSize(12).font('Helvetica-Bold');
+    doc.text('GRAND TOTAL', sumX + 10, y + 8, { width: 100 });
+    doc.text(fmt(invoice.total_amount || grandTotal), sumX + 10, y + 8, { width: sumW - 20, align: 'right' });
+    y += grandBoxH + 10;
+
+    // Paid / Balance row
+    doc.fontSize(8.5).font('Helvetica').fillColor('#4b5563');
+    doc.text('Amount Paid', sumX + 8, y, { width: 80 });
+    doc.font('Helvetica-Bold').fillColor(greenDark);
+    doc.text(fmt(totalPaid), sumX + 8, y, { width: sumW - 16, align: 'right' });
+    y += 16;
+    doc.font('Helvetica').fillColor('#4b5563');
+    doc.text('Balance', sumX + 8, y, { width: 80 });
+    doc.font('Helvetica-Bold').fillColor('#059669');
+    doc.text(`${currencySymbol}0.00`, sumX + 8, y, { width: sumW - 16, align: 'right' });
+    y += 22;
+
+    // ============================================
+    // AMOUNT IN WORDS
+    // ============================================
+    doc.fontSize(8.5).font('Helvetica').fillColor('#4b5563');
+    doc.text('Amount Received in Words:', lm, y, { width: 120 });
+    const wordsText = `${numberToWords(Number(invoice.total_amount))} only`;
+    doc.font('Helvetica-Bold').fillColor('#111827');
+    doc.text(wordsText, lm + 120, y, { width: pw - 120 });
+    y += Math.max(doc.heightOfString(wordsText, { width: pw - 120 }), 12) + 12;
+
+    // ============================================
+    // NOTES
+    // ============================================
+    if (invoice.notes) {
+      doc.fontSize(9).font('Helvetica-Bold').fillColor('#111827').text('Notes', lm, y);
+      y += 14;
+      doc.font('Helvetica').fillColor('#4b5563').fontSize(8.5);
+      doc.text(invoice.notes, lm, y, { width: pw });
+      y += doc.heightOfString(invoice.notes, { width: pw }) + 12;
+    }
+
+    // ============================================
+    // VERIFICATION BOX
+    // ============================================
+    doc.roundedRect(lm, y, pw, 44, 3);
+    doc.strokeColor(green).lineWidth(0.5).dash(3, 3).stroke();
+    doc.undash();
+    doc.fontSize(8).font('Helvetica').fillColor('#6b7280').text('VERIFICATION CODE', lm + 12, y + 7, { width: pw - 24 });
+    doc.font('Helvetica-Bold').fillColor(greenDark).fontSize(11).text(verifyCode, lm + 12, y + 21, { width: pw - 24 });
+    doc.font('Helvetica').fillColor('#9ca3af').fontSize(7.5).text('This document is cryptographically signed and can be verified against the original invoice.', lm + 12, y + 36, { width: pw - 24 });
+    y += 56;
+
+    // ============================================
+    // SIGNATURES
+    // ============================================
+    if (y + 90 > doc.page.height - 45) {
+      doc.addPage();
+      y = 45;
+    }
+    doc.fontSize(9).font('Helvetica-Bold').fillColor('#111827').text('RECEIVED BY', lm, y);
+    doc.text('AUTHORIZED SIGNATURE', rm - 200, y);
+    y += 14;
+    doc.font('Helvetica').fillColor('#4b5563').fontSize(9);
+    doc.text(receiver, lm, y);
+    doc.moveTo(rm - 200, y + 2).lineTo(rm - 30, y + 2).strokeColor('#9ca3af').lineWidth(0.5).stroke();
+    y += 34;
+
+    // Company stamp overlay near signature
+    try {
+      const s = doc.openImage(path.join(__dirname, '../../uploads/stamp.png'));
+      const ss = Math.min(110 / s.width, 110 / s.height);
+      const sw = s.width * ss, sh = s.height * ss;
+      doc.save();
+      doc.translate(lm + 120, y - 8 - sh);
+      doc.rotate(-6, { origin: [sw / 2, sh / 2] });
+      doc.image(s, 0, 0, { width: sw, height: sh });
+      doc.restore();
+    } catch (_) { /* skip */ }
+
+    // ============================================
+    // FOOTER
+    // ============================================
+    y += 20;
+    if (y + 32 > doc.page.height - 45) {
+      doc.addPage();
+      y = 45;
+    }
+    const footY = y;
+    doc.rect(0, footY - 6, doc.page.width, 32).fill(green);
+    doc.fillColor('#fff').fontSize(7.5).font('Helvetica');
+    const footerParts = [companyName];
+    if (companyEmail) footerParts.push(companyEmail);
+    if (companyWebsite) footerParts.push(companyWebsite);
+    doc.text(footerParts.join('  |  '), lm, footY + 3, { align: 'center', width: pw });
+    doc.text(`Receipt #${receiptNumber}  |  Generated ${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString('en-GB')}`, lm, footY + 16, { align: 'center', width: pw });
+
+    doc.end();
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to generate receipt' });
   }
 });
 
@@ -1169,6 +1628,8 @@ router.get('/cash-requests/:id/pdf', checkPermission('finance', 'canView'), asyn
     y += 12;
 
     doc.fontSize(7.5).font('Helvetica').fillColor('#9ca3af').text(`Generated on ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })} \u2022 This is a system-generated document`, lm, y, { width: pw, align: 'center' });
+
+    try { const s = doc.openImage(path.join(__dirname, '../../uploads/stamp.png')); const ss = Math.min(120 / s.width, 120 / s.height); const sw = s.width * ss, sh = s.height * ss; doc.save(); doc.translate(doc.page.width - 50 - sw, doc.page.height - 80 - sh); doc.rotate(-6, { origin: [sw / 2, sh / 2] }); doc.image(s, 0, 0, { width: sw, height: sh }); doc.restore(); } catch (_) {}
 
     doc.end();
   } catch (error) {

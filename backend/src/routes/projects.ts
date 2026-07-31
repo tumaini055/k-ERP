@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import path from 'path';
 import { supabase } from '../config/supabase';
 import { authenticate, checkPermission, AuthRequest } from '../middleware/auth';
 import { generateProjectCode } from '../utils/helpers';
@@ -698,6 +699,8 @@ router.get('/:id/report', checkPermission('projects', 'canView'), async (req: Au
       'K-CONNECT TECHNOLOGIES | This is a system-generated financial report.',
       { align: 'center' }
     );
+
+    try { const s = doc.openImage(path.join(__dirname, '../../uploads/stamp.png')); const ss = Math.min(120 / s.width, 120 / s.height); const sw = s.width * ss, sh = s.height * ss; doc.save(); doc.translate(doc.page.width - 50 - sw, doc.page.height - 70 - sh); doc.rotate(-6, { origin: [sw / 2, sh / 2] }); doc.image(s, 0, 0, { width: sw, height: sh }); doc.restore(); } catch (_) {}
 
     doc.end();
   } catch (error) {

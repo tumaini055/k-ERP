@@ -263,6 +263,82 @@ router.put('/billing/:id/pay', checkPermission('isp', 'canEdit'), async (req: Au
   }
 });
 
+router.delete('/billing/:id', checkPermission('isp', 'canEdit'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { data: bill, error: fetchError } = await supabase
+      .from('isp_billing')
+      .select('*')
+      .eq('id', req.params.id)
+      .single();
+    if (fetchError || !bill) {
+      res.status(404).json({ error: 'Billing record not found' });
+      return;
+    }
+
+    // If invoice had payments, recalculate subscriber's paid_through_date
+    if (Number(bill.paid_amount) > 0 && bill.subscriber_id) {
+      const { data: remainingBills } = await supabase
+        .from('isp_billing')
+        .select('amount, paid_amount, billing_date, created_at')
+        .eq('subscriber_id', bill.subscriber_id)
+        .neq('id', bill.id)
+        .not('paid_at', 'is', null);
+
+      const totalPaid = (remainingBills || []).reduce(
+        (sum, b) => sum + (Number(b.paid_amount) || 0), 0
+      );
+
+      if (totalPaid > 0) {
+        const { data: sub } = await supabase
+          .from('isp_subscribers')
+          .select('package:isp_packages!isp_subscribers_package_id_fkey(price)')
+          .eq('id', bill.subscriber_id)
+          .single();
+
+        const monthlyPrice = (sub as any)?.package?.price || bill.amount;
+        const monthsCovered = Math.max(1, Math.round(totalPaid / Number(monthlyPrice)));
+        const { data: earliestBill } = await supabase
+          .from('isp_billing')
+          .select('billing_date, created_at')
+          .eq('subscriber_id', bill.subscriber_id)
+          .neq('id', bill.id)
+          .not('paid_at', 'is', null)
+          .order('billing_date', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        const fromDate = earliestBill
+          ? new Date(earliestBill.billing_date || earliestBill.created_at)
+          : new Date();
+        const newPaidThrough = new Date(fromDate);
+        newPaidThrough.setMonth(newPaidThrough.getMonth() + monthsCovered);
+
+        await supabase
+          .from('isp_subscribers')
+          .update({ paid_through_date: newPaidThrough.toISOString().split('T')[0] })
+          .eq('id', bill.subscriber_id);
+      } else {
+        // No remaining payments, clear paid_through_date
+        await supabase
+          .from('isp_subscribers')
+          .update({ paid_through_date: null })
+          .eq('id', bill.subscriber_id);
+      }
+    }
+
+    const { data, error } = await supabase
+      .from('isp_billing')
+      .delete()
+      .eq('id', req.params.id)
+      .select('*')
+      .single();
+    if (error) throw error;
+    res.json({ data });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete billing record' });
+  }
+});
+
 router.get('/subscriptions', checkPermission('isp', 'canView'), async (req: AuthRequest, res: Response) => {
   try {
     const { ending_within_days, status } = req.query;
@@ -931,9 +1007,9 @@ router.get('/billing/:id/pdf', checkPermission('isp', 'canView'), async (req: Au
 
     y += 3;
     doc.roundedRect(sumX + 2, y, sumW - 4, grandBoxH, 3).fill('#dc2626');
-    doc.fillColor('#fff').fontSize(12).font('Helvetica-Bold');
-    doc.text('GRAND TOTAL', sumX + 10, y + 8, { width: 100 });
-    doc.text(fmt(bill.amount), sumX + 10, y + 8, { width: sumW - 20, align: 'right' });
+    doc.fillColor('#fff').font('Helvetica-Bold');
+    doc.fontSize(9).text('GRAND TOTAL', sumX + 10, y + 8, { width: 60 });
+    doc.fontSize(12).text(fmt(bill.amount), sumX + 75, y + 8, { width: sumW - 79, align: 'right' });
 
     y += grandBoxH + 22;
 
@@ -974,7 +1050,22 @@ router.get('/billing/:id/pdf', checkPermission('isp', 'canView'), async (req: Au
     doc.text(`${req.user?.first_name || ''} ${req.user?.last_name || ''}`, lm, y);
     doc.moveTo(rm - 200, y + 2).lineTo(rm - 30, y + 2).strokeColor('#9ca3af').lineWidth(0.5).stroke();
 
+    // Stamp
+    try {
+      const s = doc.openImage(path.join(__dirname, '../../uploads/stamp.png'));
+      const ss = Math.min(160 / s.width, 160 / s.height);
+      const sw = s.width * ss, sh = s.height * ss;
+      const sx = rm - 200 + (200 - sw) / 2;
+      const sy = Math.min(y - 20, doc.page.height - 120 - sh);
+      doc.save();
+      doc.translate(sx, sy);
+      doc.rotate(-8, { origin: [sw / 2, sh / 2] });
+      doc.image(s, 0, 0, { width: sw, height: sh });
+      doc.restore();
+    } catch (_) {}
+
     const footY = doc.page.height - 32;
+
     doc.rect(0, footY - 6, doc.page.width, 32).fill('#dc2626');
     doc.fillColor('#fff').fontSize(7.5).font('Helvetica');
     const footerParts = [companyName];

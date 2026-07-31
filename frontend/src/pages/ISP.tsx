@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import toast from 'react-hot-toast';
 import { dataService } from '../services/dataService';
 import { ISPSubscriber, ISPPackage, ISPBilling } from '../types';
@@ -1040,8 +1040,8 @@ export default function ISP() {
                       {subBilling.map((bill: ISPBilling) => {
                         const outstanding = Number(bill.amount) - Number(bill.paid_amount);
                         return (
-                          <>
-                          <div key={bill.id} className="rounded-lg border border-surface-200 p-3 dark:border-surface-700">
+                          <Fragment key={bill.id}>
+                          <div className="rounded-lg border border-surface-200 p-3 dark:border-surface-700">
                             <div className="flex items-start justify-between">
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
@@ -1071,6 +1071,17 @@ export default function ISP() {
                                     <CreditCard size={12} className="mr-1" />Pay
                                   </button>
                                 )}
+                                <button onClick={async () => {
+                                  if (!window.confirm('Delete this invoice? This action cannot be undone.')) return;
+                                  try {
+                                    await dataService.deleteISPBilling(bill.id);
+                                    toast.success('Invoice deleted');
+                                    if (selectedSub) loadBilling(selectedSub.id);
+                                    loadStats();
+                                  } catch (error) { toast.error('Failed to delete invoice'); }
+                                }} className="btn-secondary text-xs py-1 px-2 text-red-500 hover:text-red-700" title="Delete invoice">
+                                  <X size={12} />
+                                </button>
                               </div>
                             </div>
                           </div>
@@ -1090,7 +1101,7 @@ export default function ISP() {
                               </div>
                             </div>
                           )}
-                          </>
+                          </Fragment>
                         );
                       })}
                     </div>

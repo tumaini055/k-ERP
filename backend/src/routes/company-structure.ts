@@ -6,14 +6,25 @@ const router = Router();
 
 router.use(authenticate);
 
+async function resolveCompanyId(userId: string, currentCompanyId?: string): Promise<string | null> {
+  if (currentCompanyId) return currentCompanyId;
+  const { data: company } = await supabase.from('companies').select('id').limit(1).single();
+  if (company?.id) {
+    await supabase.from('users').update({ company_id: company.id }).eq('id', userId);
+    return company.id;
+  }
+  return null;
+}
+
 // ── Departments ──
 
 router.get('/departments', async (req: AuthRequest, res: Response) => {
   try {
+    const companyId = await resolveCompanyId(req.user!.id, req.user?.company_id);
     let query = supabase.from('departments').select('*').order('name');
 
-    if (req.user!.role !== 'super_admin' && req.user!.company_id) {
-      query = query.eq('company_id', req.user!.company_id);
+    if (companyId) {
+      query = query.or(`company_id.is.null,company_id.eq.${companyId}`);
     }
 
     const { data, error } = await query;
@@ -31,9 +42,10 @@ router.post('/departments', checkPermission('settings', 'canEdit'), async (req: 
       res.status(400).json({ error: 'Department name is required' });
       return;
     }
+    const companyId = await resolveCompanyId(req.user!.id, req.user?.company_id);
     const { data, error } = await supabase
       .from('departments')
-      .insert({ name, code, description, company_id: req.user!.company_id })
+      .insert({ name, code, description, company_id: companyId })
       .select('*')
       .single();
     if (error) throw error;
@@ -75,10 +87,11 @@ router.delete('/departments/:id', checkPermission('settings', 'canDelete'), asyn
 
 router.get('/positions', async (req: AuthRequest, res: Response) => {
   try {
+    const companyId = await resolveCompanyId(req.user!.id, req.user?.company_id);
     let query = supabase.from('positions').select('*, department:departments(name)').order('name');
 
-    if (req.user!.role !== 'super_admin' && req.user!.company_id) {
-      query = query.eq('company_id', req.user!.company_id);
+    if (companyId) {
+      query = query.or(`company_id.is.null,company_id.eq.${companyId}`);
     }
 
     if (req.query.department_id) {
@@ -106,9 +119,10 @@ router.post('/positions', checkPermission('settings', 'canEdit'), async (req: Au
       res.status(400).json({ error: 'Position name is required' });
       return;
     }
+    const companyId = await resolveCompanyId(req.user!.id, req.user?.company_id);
     const { data, error } = await supabase
       .from('positions')
-      .insert({ name, department_id, description, company_id: req.user!.company_id })
+      .insert({ name, department_id, description, company_id: companyId })
       .select('*, department:departments(name)')
       .single();
     if (error) throw error;
@@ -150,16 +164,16 @@ router.delete('/positions/:id', checkPermission('settings', 'canDelete'), async 
 
 router.get('/organization-chart', async (req: AuthRequest, res: Response) => {
   try {
-    const companyId = req.user!.company_id;
+    const companyId = await resolveCompanyId(req.user!.id, req.user?.company_id);
     const deptOrder: Record<string, number> = { Management: 1, Hardware: 2, Software: 3, Marketing: 4 };
     let deptQuery = supabase.from('departments').select('*');
-    let empQuery = supabase.from('users').select('id, first_name, last_name, email, phone, role, department, position, avatar_url')
+    let empQuery = supabase.from('users').select('id, first_name, last_name, email, phone, role, department, position, avatar_url, company_id')
       .neq('role', 'customer')
       .order('first_name');
 
     if (companyId) {
-      deptQuery = deptQuery.eq('company_id', companyId);
-      empQuery = empQuery.eq('company_id', companyId);
+      deptQuery = deptQuery.or(`company_id.is.null,company_id.eq.${companyId}`);
+      empQuery = empQuery.or(`company_id.is.null,company_id.eq.${companyId}`);
     }
 
     const [deptRes, empRes] = await Promise.all([deptQuery, empQuery]);
@@ -178,6 +192,11 @@ router.get('/organization-chart', async (req: AuthRequest, res: Response) => {
         name: posName,
         employees: deptEmployees.filter((e: any) => e.position === posName),
       }));
+
+      const unassigned = deptEmployees.filter((e: any) => !e.position);
+      if (unassigned.length > 0) {
+        positions.push({ name: 'Unassigned', employees: unassigned });
+      }
 
       return {
         id: dept.id,

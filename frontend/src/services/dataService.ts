@@ -161,6 +161,32 @@ export const dataService = {
       throw err;
     }
   },
+  async downloadReceiptPdf(invoiceId: string) {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/finance/invoices/${invoiceId}/receipt`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || `Download failed: ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const contentDisp = res.headers.get('content-disposition');
+      const match = contentDisp?.match(/filename="(.+?)"/);
+      a.download = match ? match[1] : `receipt-${invoiceId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Receipt PDF download failed:', err);
+      throw err;
+    }
+  },
   async getExpenses(params?: any) {
     const { data } = await api.get('/finance/expenses', { params });
     return data;
@@ -273,6 +299,44 @@ export const dataService = {
     const { data } = await api.get(`/employees/${userId}/attendance`, { params });
     return data;
   },
+  async getEmployeeContract(userId: string) {
+    const { data } = await api.get(`/employees/${userId}/contract`);
+    return data;
+  },
+  async createEmployeeContract(userId: string, body: any) {
+    const { data } = await api.post(`/employees/${userId}/contract`, body);
+    return data;
+  },
+  async updateEmployeeContract(userId: string, body: any) {
+    const { data } = await api.put(`/employees/${userId}/contract`, body);
+    return data;
+  },
+  async downloadEmployeeContractPdf(userId: string) {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/employees/${userId}/contract/pdf`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || `Download failed: ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const contentDisp = res.headers.get('content-disposition');
+      const match = contentDisp?.match(/filename="(.+?)"/);
+      a.download = match ? match[1] : `employment-contract-${userId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Employment contract PDF download failed:', err);
+      throw err;
+    }
+  },
   async recordAttendance(body: any) {
     const { data } = await api.post('/employees/attendance', body);
     return data;
@@ -329,6 +393,10 @@ export const dataService = {
   },
   async payISPBilling(id: string, body?: any) {
     const { data } = await api.put(`/isp/billing/${id}/pay`, body || {});
+    return data;
+  },
+  async deleteISPBilling(id: string) {
+    const { data } = await api.delete(`/isp/billing/${id}`);
     return data;
   },
   async getISPSubscriptions(params?: any) {

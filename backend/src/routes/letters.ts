@@ -204,6 +204,8 @@ router.post('/generate', async (req: AuthRequest, res: Response) => {
     doc.fontSize(7).font('Helvetica').fillColor('#94a3b8');
     doc.text(footerParts.join(' | '), lm, doc.page.height - 36, { align: 'center', width: pw });
 
+    try { const s = doc.openImage(path.join(__dirname, '../../uploads/stamp.png')); const ss = Math.min(120 / s.width, 120 / s.height); const sw = s.width * ss, sh = s.height * ss; doc.save(); doc.translate(doc.page.width - 50 - sw, doc.page.height - 70 - sh); doc.rotate(-6, { origin: [sw / 2, sh / 2] }); doc.image(s, 0, 0, { width: sw, height: sh }); doc.restore(); } catch (_) {}
+
     doc.end();
   } catch (error) {
     console.error('Letter PDF generation error:', error);

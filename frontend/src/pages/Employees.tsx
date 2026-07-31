@@ -6,7 +6,7 @@ import { formatDate, formatDateTime, formatCurrency, getUserInitials, getStatusL
 import {
   UserCircle, Plus, Users, CalendarDays, Award, Search,
   X, RefreshCw, Edit2, Check, Trash2,
-  Briefcase, Clock, CheckCircle2, Send,
+  Briefcase, Clock, CheckCircle2, Send, Download, Save,
 } from 'lucide-react';
 
 const roleLabels: Record<string, string> = {
@@ -86,6 +86,15 @@ export default function Employees() {
   });
   const [showLeaveForm, setShowLeaveForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  const contractTypes = ['permanent', 'fixed_term', 'probationary', 'internship', 'contract'];
+  const employmentTypes = ['full_time', 'part_time', 'remote', 'shift'];
+  const [editingContract, setEditingContract] = useState(false);
+  const [contractForm, setContractForm] = useState({
+    contract_type: 'permanent', employment_type: 'full_time', start_date: '', end_date: '',
+    salary: '', probation_months: 3, notice_period_months: 1, working_hours: '',
+    leave_entitlement: '', duties: '', benefits: '', terms: '', signed_date: '', is_active: true,
+  });
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
 
@@ -149,6 +158,7 @@ export default function Employees() {
     setSelectedEmployee(null);
     setEmployeeDetail(null);
     setEditing(false);
+    setEditingContract(false);
     setShowLeaveForm(false);
   };
 
@@ -230,6 +240,46 @@ export default function Employees() {
       fetchLeaves();
     } catch (error) { toast.error('Failed to create leave'); }
     setSubmitting(false);
+  };
+
+  const openContractForm = (c: any) => {
+    setEditingContract(true);
+    setContractForm({
+      contract_type: c?.contract_type || 'permanent',
+      employment_type: c?.employment_type || 'full_time',
+      start_date: c?.start_date || '',
+      end_date: c?.end_date || '',
+      salary: c?.salary ?? '',
+      probation_months: c?.probation_months ?? 3,
+      notice_period_months: c?.notice_period_months ?? 1,
+      working_hours: c?.working_hours || '',
+      leave_entitlement: c?.leave_entitlement || '',
+      duties: c?.duties || '',
+      benefits: c?.benefits || '',
+      terms: c?.terms || '',
+      signed_date: c?.signed_date || '',
+      is_active: c?.is_active ?? true,
+    });
+  };
+
+  const saveContract = async () => {
+    if (!selectedEmployee) return;
+    try {
+      const body = {
+        ...contractForm,
+        salary: contractForm.salary ? Number(contractForm.salary) : null,
+        probation_months: Number(contractForm.probation_months) || 0,
+        notice_period_months: Number(contractForm.notice_period_months) || 0,
+      };
+      if (contract) {
+        await dataService.updateEmployeeContract(selectedEmployee.id, body);
+      } else {
+        await dataService.createEmployeeContract(selectedEmployee.id, body);
+      }
+      toast.success('Contract saved');
+      setEditingContract(false);
+      openEmployeeDetail(selectedEmployee);
+    } catch (error) { toast.error('Failed to save contract'); }
   };
 
   const ed = employeeDetail;
@@ -343,7 +393,7 @@ export default function Employees() {
 
             <div className="flex border-b border-surface-200 dark:border-surface-700">
               {(['overview', 'contract', 'attendance', 'leave'] as const).map((t) => (
-                <button key={t} onClick={() => { setDetailTab(t); setEditing(false); }}
+                <button key={t} onClick={() => { setDetailTab(t); setEditing(false); setEditingContract(false); }}
                   className={`flex-1 px-4 py-3 text-sm font-medium capitalize transition-colors border-b-2 ${
                     detailTab === t ? 'border-primary-600 text-primary-600' : 'border-transparent text-surface-500 hover:text-surface-700'
                   }`}>
@@ -444,18 +494,122 @@ export default function Employees() {
               {/* Contract Tab */}
               {detailTab === 'contract' && (
                 <div className="space-y-5">
-                  {contract ? (
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-surface-700 dark:text-surface-300">
+                      {contract ? 'Employment Contract' : 'No Contract Yet'}
+                    </p>
+                    <div className="flex gap-2">
+                      {contract && (
+                        <button onClick={() => dataService.downloadEmployeeContractPdf(ed.id).catch(() => toast.error('Failed to download contract'))} className="btn-secondary text-xs py-1.5 px-3">
+                          <Download size={14} className="mr-1" /> PDF
+                        </button>
+                      )}
+                      <button onClick={() => { setEditingContract(!editingContract); if (!editingContract) openContractForm(contract); }} className="btn-primary text-xs py-1.5 px-3">
+                        <Edit2 size={14} className="mr-1" /> {contract ? 'Edit' : 'Create'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {editingContract ? (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="label">Contract Type</label>
+                          <select className="input" value={contractForm.contract_type} onChange={e => setContractForm({...contractForm, contract_type: e.target.value})}>
+                            {contractTypes.map(t => <option key={t} value={t}>{getStatusLabel(t)}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="label">Employment Type</label>
+                          <select className="input" value={contractForm.employment_type} onChange={e => setContractForm({...contractForm, employment_type: e.target.value})}>
+                            {employmentTypes.map(t => <option key={t} value={t}>{getStatusLabel(t)}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="label">Start Date *</label>
+                          <input type="date" className="input" value={contractForm.start_date} onChange={e => setContractForm({...contractForm, start_date: e.target.value})} required />
+                        </div>
+                        <div>
+                          <label className="label">End Date {contractForm.contract_type === 'permanent' ? '(optional)' : ''}</label>
+                          <input type="date" className="input" value={contractForm.end_date} onChange={e => setContractForm({...contractForm, end_date: e.target.value})} />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="label">Salary (TSh)</label>
+                          <input type="number" className="input" value={contractForm.salary} onChange={e => setContractForm({...contractForm, salary: e.target.value})} />
+                        </div>
+                        <div>
+                          <label className="label">Probation (months)</label>
+                          <input type="number" className="input" value={contractForm.probation_months} onChange={e => setContractForm({...contractForm, probation_months: Number(e.target.value)})} />
+                        </div>
+                        <div>
+                          <label className="label">Notice (months)</label>
+                          <input type="number" className="input" value={contractForm.notice_period_months} onChange={e => setContractForm({...contractForm, notice_period_months: Number(e.target.value)})} />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="label">Working Hours</label>
+                        <input className="input" value={contractForm.working_hours} onChange={e => setContractForm({...contractForm, working_hours: e.target.value})} placeholder="e.g. Monday–Friday, 8:00 AM – 5:00 PM" />
+                      </div>
+                      <div>
+                        <label className="label">Leave Entitlement</label>
+                        <input className="input" value={contractForm.leave_entitlement} onChange={e => setContractForm({...contractForm, leave_entitlement: e.target.value})} placeholder="e.g. 28 working days per year" />
+                      </div>
+                      <div>
+                        <label className="label">Duties & Responsibilities</label>
+                        <textarea className="input" rows={3} value={contractForm.duties} onChange={e => setContractForm({...contractForm, duties: e.target.value})} />
+                      </div>
+                      <div>
+                        <label className="label">Benefits & Allowances</label>
+                        <textarea className="input" rows={2} value={contractForm.benefits} onChange={e => setContractForm({...contractForm, benefits: e.target.value})} />
+                      </div>
+                      <div>
+                        <label className="label">Additional Terms & Conditions</label>
+                        <textarea className="input" rows={3} value={contractForm.terms} onChange={e => setContractForm({...contractForm, terms: e.target.value})} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="label">Signed Date</label>
+                          <input type="date" className="input" value={contractForm.signed_date} onChange={e => setContractForm({...contractForm, signed_date: e.target.value})} />
+                        </div>
+                        <div className="flex items-end">
+                          <label className="flex items-center gap-2 text-sm text-surface-700 dark:text-surface-300">
+                            <input type="checkbox" className="rounded border-surface-300" checked={contractForm.is_active} onChange={e => setContractForm({...contractForm, is_active: e.target.checked})} />
+                            Active Contract
+                          </label>
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-3 pt-2">
+                        <button onClick={() => setEditingContract(false)} className="btn-secondary">Cancel</button>
+                        <button onClick={saveContract} disabled={!contractForm.start_date} className="btn-primary">
+                          <Save size={14} className="mr-1" /> {contract ? 'Update Contract' : 'Create Contract'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : contract ? (
                     <div className="grid grid-cols-2 gap-4">
-                      <div><p className="text-xs text-surface-500">Contract Type</p><p className="text-sm font-medium capitalize">{contract.contract_type}</p></div>
+                      <div><p className="text-xs text-surface-500">Contract No</p><p className="text-sm font-mono">{contract.contract_number || '-'}</p></div>
                       <div><p className="text-xs text-surface-500">Status</p><span className={contract.is_active ? 'badge-success' : 'badge-danger'}>{contract.is_active ? 'Active' : 'Inactive'}</span></div>
+                      <div><p className="text-xs text-surface-500">Contract Type</p><p className="text-sm font-medium capitalize">{getStatusLabel(contract.contract_type)}</p></div>
+                      <div><p className="text-xs text-surface-500">Employment Type</p><p className="text-sm font-medium capitalize">{getStatusLabel(contract.employment_type)}</p></div>
                       <div><p className="text-xs text-surface-500">Salary</p><p className="text-sm font-bold text-accent-600">{contract.salary ? formatCurrency(contract.salary) : '-'}</p></div>
-                      <div><p className="text-xs text-surface-500">Employment Type</p><p className="text-sm font-medium capitalize">{contract.employment_type?.replace('_', ' ') || '-'}</p></div>
+                      <div><p className="text-xs text-surface-500">Probation</p><p className="text-sm font-medium">{contract.probation_months ? `${contract.probation_months} months` : 'None'}</p></div>
                       <div><p className="text-xs text-surface-500">Start Date</p><p className="text-sm font-medium">{contract.start_date ? formatDate(contract.start_date) : '-'}</p></div>
                       <div><p className="text-xs text-surface-500">End Date</p><p className="text-sm font-medium">{contract.end_date ? formatDate(contract.end_date) : 'Indefinite'}</p></div>
+                      {contract.notice_period_months > 0 && <div><p className="text-xs text-surface-500">Notice Period</p><p className="text-sm font-medium">{contract.notice_period_months} months</p></div>}
+                      {contract.signed_date && <div><p className="text-xs text-surface-500">Signed Date</p><p className="text-sm font-medium">{formatDate(contract.signed_date)}</p></div>}
+                      {contract.working_hours && <div className="col-span-2"><p className="text-xs text-surface-500">Working Hours</p><p className="text-sm">{contract.working_hours}</p></div>}
+                      {contract.leave_entitlement && <div className="col-span-2"><p className="text-xs text-surface-500">Leave Entitlement</p><p className="text-sm">{contract.leave_entitlement}</p></div>}
+                      {contract.duties && <div className="col-span-2"><p className="text-xs text-surface-500">Duties & Responsibilities</p><p className="text-sm">{contract.duties}</p></div>}
+                      {contract.benefits && <div className="col-span-2"><p className="text-xs text-surface-500">Benefits & Allowances</p><p className="text-sm">{contract.benefits}</p></div>}
+                      {contract.terms && <div className="col-span-2"><p className="text-xs text-surface-500">Additional Terms</p><p className="text-sm">{contract.terms}</p></div>}
                       {contract.created_at && <div><p className="text-xs text-surface-500">Created</p><p className="text-sm font-medium">{formatDate(contract.created_at)}</p></div>}
                     </div>
                   ) : (
-                    <p className="text-center text-surface-400 py-8">No contract information available</p>
+                    <p className="text-center text-surface-400 py-8">No contract information available. Click <span className="font-medium">Create</span> to add an employment contract.</p>
                   )}
                 </div>
               )}

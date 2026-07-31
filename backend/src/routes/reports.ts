@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import path from 'path';
 import { supabase } from '../config/supabase';
 import { authenticate, checkPermission, AuthRequest } from '../middleware/auth';
 
@@ -1285,6 +1286,8 @@ router.get('/financial/pdf', checkPermission('reports', 'canView'), async (req: 
     doc.fontSize(7.5).font('Helvetica').fillColor('#9ca3af');
     doc.text(`${companyName}  |  ${companyEmail}  |  ${companyWebsite}`, lm, footerY - 4, { width: pw, align: 'center' });
     doc.text(`Page 1 of ${pageCount}`, lm, footerY + 6, { width: pw, align: 'center' });
+
+    try { const s = doc.openImage(path.join(__dirname, '../../uploads/stamp.png')); const ss = Math.min(120 / s.width, 120 / s.height); const sw = s.width * ss, sh = s.height * ss; doc.save(); doc.translate(doc.page.width - 50 - sw, footerY - 16 - sh); doc.rotate(-6, { origin: [sw / 2, sh / 2] }); doc.image(s, 0, 0, { width: sw, height: sh }); doc.restore(); } catch (_) {}
 
     doc.end();
   } catch (error) {

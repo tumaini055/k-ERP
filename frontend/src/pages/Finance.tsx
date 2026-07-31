@@ -840,6 +840,11 @@ export default function Finance() {
                       <button onClick={() => dataService.downloadInvoicePdf(id.id)} className="btn-secondary text-xs py-1.5 px-3">
                         <Download size={14} className="mr-1" /> PDF
                       </button>
+                      {id.status === 'paid' && (
+                        <button onClick={() => dataService.downloadReceiptPdf(id.id).catch(() => toast.error('Failed to download receipt'))} className="btn-success text-xs py-1.5 px-3">
+                          <Receipt size={14} className="mr-1" /> Receipt
+                        </button>
+                      )}
                       <button onClick={openEditInv} className="btn-secondary text-xs py-1.5 px-3">
                         <Edit2 size={14} className="mr-1" /> Edit
                       </button>
@@ -909,11 +914,18 @@ export default function Finance() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-medium">Payment History</p>
-                    {id.status !== 'paid' && (
-                      <button onClick={() => { setPayForm({ amount: calcInvBalance(id), payment_method: 'cash', reference_number: '', notes: '' }); setShowPayModal(true); }} className="btn-primary text-xs py-1.5 px-3">
-                        <Plus size={14} className="mr-1" /> Record Payment
-                      </button>
-                    )}
+                    <div className="flex gap-2">
+                      {id.status === 'paid' && (
+                        <button onClick={() => dataService.downloadReceiptPdf(id.id).catch(() => toast.error('Failed to download receipt'))} className="btn-success text-xs py-1.5 px-3">
+                          <Receipt size={14} className="mr-1" /> Receipt
+                        </button>
+                      )}
+                      {id.status !== 'paid' && (
+                        <button onClick={() => { setPayForm({ amount: calcInvBalance(id), payment_method: 'cash', reference_number: '', notes: '' }); setShowPayModal(true); }} className="btn-primary text-xs py-1.5 px-3">
+                          <Plus size={14} className="mr-1" /> Record Payment
+                        </button>
+                      )}
+                    </div>
                   </div>
                   {payments.length === 0 ? (
                     <p className="text-center py-8 text-surface-400">No payments recorded</p>
