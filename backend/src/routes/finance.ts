@@ -65,7 +65,7 @@ router.get('/invoices/:id/pdf', checkPermission('finance', 'canView'), async (re
   try {
     const { data: invoice } = await supabase
       .from('invoices')
-      .select('*, customer:customers!invoices_customer_id_fkey(company_name, contact_person, email, phone, address)')
+      .select('*, customer:customers!invoices_customer_id_fkey(company_name, contact_person, email, phone, address), project:projects!invoices_project_id_fkey(name, description)')
       .eq('id', req.params.id)
       .single();
 
@@ -255,12 +255,17 @@ router.get('/invoices/:id/pdf', checkPermission('finance', 'canView'), async (re
     // ============================================
     // NOTES / SCOPE
     // ============================================
-    if (invoice.notes) {
-      doc.fontSize(9).font('Helvetica-Bold').fillColor('#111827').text('Scope of the Project', lm, y);
+    const isQuotation = invoice.invoice_type === 'quotation';
+    const scopeTitle = isQuotation ? 'Scope of the Project' : 'Project Notes';
+    const scopeText = isQuotation
+      ? (invoice.project?.name ? (invoice.project.description ? `${invoice.project.name}: ${invoice.project.description}` : invoice.project.name) : (invoice.notes || '—'))
+      : (invoice.notes || '');
+    if (isQuotation || scopeText) {
+      doc.fontSize(9).font('Helvetica-Bold').fillColor('#111827').text(scopeTitle, lm, y);
       y += 14;
       doc.font('Helvetica').fillColor('#4b5563').fontSize(8.5);
-      doc.text(invoice.notes, lm, y, { width: pw });
-      y += doc.heightOfString(invoice.notes, { width: pw }) + 14;
+      doc.text(scopeText, lm, y, { width: pw });
+      y += doc.heightOfString(scopeText, { width: pw }) + 14;
     }
 
     // ============================================
