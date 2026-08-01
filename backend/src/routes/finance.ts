@@ -256,7 +256,7 @@ router.get('/invoices/:id/pdf', checkPermission('finance', 'canView'), async (re
     // NOTES / SCOPE
     // ============================================
     if (invoice.notes) {
-      doc.fontSize(9).font('Helvetica-Bold').fillColor('#111827').text('Project Notes', lm, y);
+      doc.fontSize(9).font('Helvetica-Bold').fillColor('#111827').text('Scope of the Project', lm, y);
       y += 14;
       doc.font('Helvetica').fillColor('#4b5563').fontSize(8.5);
       doc.text(invoice.notes, lm, y, { width: pw });
