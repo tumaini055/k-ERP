@@ -6,7 +6,7 @@ import { formatCurrency, formatDate, formatDateTime, getStatusLabel } from '../l
 import { useAuth } from '../context/AuthContext';
 import {
   DollarSign, TrendingUp, TrendingDown, FileText, Plus, X, RefreshCw,
-  Search, Edit2, Trash2, CreditCard, Receipt, PieChart, Download,
+  Search, Edit2, Trash2, CreditCard, Receipt, PieChart, Download, Copy,
   FolderKanban, ExternalLink, Banknote, Clock, CheckCircle2, XCircle, Ban,
 } from 'lucide-react';
 
@@ -283,8 +283,23 @@ export default function Finance() {
     setInvItems((invDetail.items || []).map((i: InvoiceItem) => ({
       description: i.description, quantity: i.quantity, unit_price: i.unit_price,
     })));
-    if (invItems.length === 0) setInvItems([{ description: '', quantity: 1, unit_price: 0 }]);
     setShowInvModal(true);
+  };
+
+  const duplicateInv = () => {
+    if (!invDetail) return;
+    setEditingInv(null);
+    setInvForm({
+      customer_id: '', project_id: '', invoice_type: invDetail.invoice_type || 'quotation',
+      issue_date: new Date().toISOString().split('T')[0], due_date: '',
+      tax_rate: invDetail.tax_rate || 18, discount_amount: invDetail.discount_amount || 0,
+      notes: invDetail.notes || '', terms: invDetail.terms || '',
+    });
+    setInvItems((invDetail.items || []).map((i: InvoiceItem) => ({
+      description: i.description, quantity: i.quantity, unit_price: i.unit_price,
+    })));
+    setShowInvModal(true);
+    toast.success('Quotation copied - choose customer & project then save');
   };
 
   const handleSaveInv = async (e: React.FormEvent) => {
@@ -847,6 +862,9 @@ export default function Finance() {
                       )}
                       <button onClick={openEditInv} className="btn-secondary text-xs py-1.5 px-3">
                         <Edit2 size={14} className="mr-1" /> Edit
+                      </button>
+                      <button onClick={duplicateInv} className="btn-secondary text-xs py-1.5 px-3">
+                        <Copy size={14} className="mr-1" /> Duplicate
                       </button>
                       {id.status !== 'paid' && (
                         <button onClick={() => { setPayForm({ amount: calcInvBalance(id), payment_method: 'cash', reference_number: '', notes: '' }); setShowPayModal(true); }} className="btn-primary text-xs py-1.5 px-3">
