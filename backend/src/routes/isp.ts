@@ -165,6 +165,32 @@ router.get('/billing', checkPermission('isp', 'canView'), async (req: AuthReques
   }
 });
 
+// Paid invoices available for receipt generation
+router.get('/billing/receipts', checkPermission('isp', 'canView'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { limit = 200, search } = req.query;
+
+    let query = supabase
+      .from('isp_billing')
+      .select('*, subscriber:isp_subscribers!isp_billing_subscriber_id_fkey(subscriber_code, package:isp_packages!isp_subscribers_package_id_fkey(name), customer:customers!isp_subscribers_customer_id_fkey(company_name, contact_person, phone))', { count: 'exact' })
+      .gt('paid_amount', 0);
+
+    if (search) {
+      query = query.or(`subscriber.subscriber_code.ilike.%${search}%,subscriber.customer.company_name.ilike.%${search}%`);
+    }
+
+    const { data, error, count } = await query
+      .order('paid_at', { ascending: false, nullsFirst: false })
+      .order('billing_date', { ascending: false })
+      .limit(Number(limit) || 200);
+
+    if (error) throw error;
+    res.json({ data, pagination: { total: count, limit: Number(limit) || 200 } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch receipts' });
+  }
+});
+
 router.post('/billing', checkPermission('isp', 'canCreate'), async (req: AuthRequest, res: Response) => {
   try {
     const { subscriber_id, amount, billing_date, due_date, description } = req.body;
@@ -1077,6 +1103,358 @@ router.get('/billing/:id/pdf', checkPermission('isp', 'canView'), async (req: Au
     doc.end();
   } catch (error) {
     res.status(500).json({ error: 'Failed to generate PDF' });
+  }
+});
+
+// ============================================
+// ISP BILLING RECEIPT PDF (generated for paid bills)
+// ============================================
+function numberToWords(value: number): string {
+  const ones = ['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+    'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  const scales = ['', 'Thousand', 'Million', 'Billion', 'Trillion'];
+  const underHundred = (n: number): string => {
+    if (n < 20) return ones[n];
+    const t = Math.floor(n / 10);
+    const o = n % 10;
+    return tens[t] + (o ? ` ${ones[o]}` : '');
+  };
+  if (value === 0) return 'Zero';
+  const abs = Math.abs(value);
+  const cents = Math.round((abs - Math.floor(abs)) * 100);
+  let whole = Math.floor(abs);
+  const parts: string[] = [];
+  let scaleIdx = 0;
+  while (whole > 0) {
+    const chunk = whole % 1000;
+    if (chunk > 0) {
+      const h = Math.floor(chunk / 100);
+      const rem = chunk % 100;
+      let chunkText = '';
+      if (h > 0) {
+        chunkText += `${ones[h]} Hundred`;
+        if (rem > 0) chunkText += ` and ${underHundred(rem)}`;
+      } else {
+        chunkText += underHundred(rem);
+      }
+      if (scales[scaleIdx]) chunkText += ` ${scales[scaleIdx]}`;
+      parts.unshift(chunkText);
+    }
+    whole = Math.floor(whole / 1000);
+    scaleIdx++;
+  }
+  const wholeText = parts.join(' ');
+  return cents > 0 ? `${wholeText} and ${cents}/100` : wholeText;
+}
+
+router.get('/billing/:id/receipt', checkPermission('isp', 'canView'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { data: bill } = await supabase
+      .from('isp_billing')
+      .select('*, subscriber:isp_subscribers!isp_billing_subscriber_id_fkey(subscriber_code, connection_type, installation_address, customer:customers!isp_subscribers_customer_id_fkey(company_name, contact_person, email, phone, address), package:isp_packages!isp_subscribers_package_id_fkey(name, price, bandwidth_download, bandwidth_upload, bandwidth_unit, billing_cycle))')
+      .eq('id', req.params.id)
+      .single();
+
+    if (!bill) {
+      res.status(404).json({ error: 'Billing record not found' });
+      return;
+    }
+
+    const paidAmount = Number(bill.paid_amount) || 0;
+    if (paidAmount <= 0) {
+      res.status(400).json({ error: 'Receipt can only be generated for paid bills' });
+      return;
+    }
+
+    let companyName = 'K-Connect Technologies';
+    let companyEmail = 'info@kconnect.co.tz';
+    let companyWebsite = 'www.kconnect.co.tz';
+    let companyAddress = '';
+    let companyPhone = '';
+    let taxId = '';
+    let logoUrl = '';
+    let currencySymbol = 'TSh ';
+    let bankName = '';
+    let bankAccountName = '';
+    let bankAccountNumber = '';
+
+    const { data: user } = await supabase.from('users').select('company_id').eq('id', req.user!.id).single();
+    const companyId = user?.company_id;
+    if (companyId) {
+      const { data: cs } = await supabase.from('company_settings').select('settings').eq('company_id', companyId).single();
+      if (cs?.settings) {
+        const s = cs.settings;
+        if (s.company_name) companyName = s.company_name;
+        if (s.company_email) companyEmail = s.company_email;
+        if (s.company_website) companyWebsite = s.company_website;
+        if (s.company_address) companyAddress = s.company_address;
+        if (s.company_phone) companyPhone = s.company_phone;
+        if (s.tax_id) taxId = s.tax_id;
+        if (s.logo_url) logoUrl = s.logo_url;
+        if (s.bank_name) bankName = s.bank_name;
+        if (s.bank_account_name) bankAccountName = s.bank_account_name;
+        if (s.bank_account_number) bankAccountNumber = s.bank_account_number;
+        if (s.currency === 'USD') currencySymbol = '$ ';
+        else if (s.currency === 'EUR') currencySymbol = '€ ';
+        else if (s.currency === 'GBP') currencySymbol = '£ ';
+        else if (s.currency === 'KES' || s.currency === 'UGX') currencySymbol = `${s.currency} `;
+        else currencySymbol = 'TSh ';
+      }
+    }
+
+    const receiptNumber = `RCT-${bill.id.slice(0, 8).toUpperCase()}`;
+    const customerName = bill.subscriber?.customer
+      ? (bill.subscriber.customer.company_name || bill.subscriber.customer.contact_person || '\u2014')
+      : '\u2014';
+
+    const crypto = require('crypto');
+    const verifySource = `${receiptNumber}|${bill.id}|${Number(bill.amount).toFixed(2)}|${paidAmount.toFixed(2)}|${customerName}|${bill.billing_date || bill.created_at}`;
+    const verifyHash = crypto.createHash('sha256').update(verifySource).digest('hex').toUpperCase();
+    const verifyCode = `${verifyHash.slice(0, 4)}-${verifyHash.slice(4, 8)}-${verifyHash.slice(8, 12)}-${verifyHash.slice(12, 16)}`;
+
+    const receivedBy = `${req.user?.first_name || ''} ${req.user?.last_name || ''}`.trim() || '\u2014';
+    const receiptDate = bill.paid_at || bill.updated_at || new Date().toISOString();
+
+    const PDFDocument = require('pdfkit');
+    const doc = new PDFDocument({ margin: 45, size: 'A4' });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="receipt-${receiptNumber}.pdf"`);
+    doc.pipe(res);
+
+    const pw = doc.page.width - 90;
+    const lm = 45;
+    const rm = doc.page.width - 45;
+    const green = '#059669';
+    const greenDark = '#065f46';
+    const greenLight = '#ecfdf5';
+    const greenBorder = '#a7f3d0';
+    const fmt = (n: number) => `${currencySymbol}${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+    let y = 0;
+
+    doc.rect(0, 0, doc.page.width, 48).fill(green);
+    doc.fillColor('#fff').fontSize(18).font('Helvetica-Bold').text('OFFICIAL RECEIPT', lm, 14, { align: 'center', width: pw });
+
+    y = 62;
+    doc.roundedRect(lm, y, 118, 22, 11).fill('#d1fae5');
+    doc.fillColor(greenDark).fontSize(10).font('Helvetica-Bold').text('PAID IN FULL', lm, y + 6, { width: 118, align: 'center' });
+    y += 34;
+
+    const addrParts = companyAddress ? companyAddress.split(',').map((s: string) => s.trim()) : [];
+    const addrLine1 = addrParts.length > 0 ? addrParts[0] : '';
+    const addrLine2 = addrParts.length > 1 ? addrParts.slice(1).join(', ') : '';
+
+    let logoWidth = 0;
+    let logoHeight = 0;
+    const logoY = y;
+    if (logoUrl) {
+      try {
+        const logoPath = logoUrl.startsWith('/uploads') ? path.join(__dirname, '../..', logoUrl) : logoUrl;
+        const img = doc.openImage(logoPath);
+        const maxLogoW = 68;
+        const maxLogoH = 58;
+        const scale = Math.min(maxLogoW / img.width, maxLogoH / img.height);
+        logoWidth = img.width * scale;
+        logoHeight = img.height * scale;
+        doc.image(img, lm, logoY, { width: logoWidth, height: logoHeight });
+      } catch (_e) { /* skip */ }
+    }
+
+    const refBoxW = 210;
+    const refBoxX = rm - refBoxW;
+    const ciX = logoWidth > 0 ? lm + logoWidth + 14 : lm;
+    const ciY = logoWidth > 0 ? logoY + 2 : logoY;
+    const maxCiWidth = refBoxX - ciX - 14;
+
+    doc.fontSize(15).font('Helvetica-Bold').fillColor('#111827').text(companyName, ciX, ciY, { width: maxCiWidth });
+    const nameH = doc.heightOfString(companyName, { width: maxCiWidth });
+    let ciBottom = ciY + nameH + 6;
+
+    doc.fontSize(8.5).font('Helvetica').fillColor('#4b5563');
+    const ciLines: string[] = [];
+    if (addrLine1) ciLines.push(addrLine1);
+    if (addrLine2) ciLines.push(addrLine2);
+    if (companyPhone) ciLines.push(companyPhone);
+    if (companyEmail) ciLines.push(companyEmail);
+    if (taxId) ciLines.push(`TIN: ${taxId}`);
+
+    for (const line of ciLines) {
+      doc.text(line, ciX, ciBottom, { width: maxCiWidth });
+      ciBottom += Math.max(doc.heightOfString(line, { width: maxCiWidth }), 11) + 2;
+    }
+
+    const leftEndY = Math.max(ciBottom, logoY + (logoHeight || 0) + 5);
+
+    const refBoxY = y;
+    const refPad = 8;
+    const refInnerW = refBoxW - refPad * 2;
+    doc.rect(refBoxX, refBoxY, refBoxW, 64).fill(greenLight).strokeColor(green).lineWidth(0.5).stroke();
+    doc.fillColor(green).fontSize(9).font('Helvetica-Bold').text('RECEIPT NO', refBoxX + refPad, refBoxY + 6, { width: refInnerW });
+    doc.fillColor('#111827').font('Helvetica').fontSize(10).text(receiptNumber, refBoxX + refPad, refBoxY + 19, { width: refInnerW });
+    doc.fillColor('#6b7280').fontSize(8);
+    let refRowY = refBoxY + 36;
+    doc.text(`Subscriber: ${bill.subscriber?.subscriber_code || '\u2014'}`, refBoxX + refPad, refRowY, { width: refInnerW });
+    refRowY += 11;
+    doc.text(`Date: ${new Date(receiptDate).toLocaleDateString('en-GB')}`, refBoxX + refPad, refRowY, { width: refInnerW });
+    refRowY += 11;
+    if (taxId) doc.text(`TIN: ${taxId}`, refBoxX + refPad, refRowY, { width: refInnerW });
+
+    const rightEndY = refBoxY + 64;
+    y = Math.max(leftEndY, rightEndY) + 16;
+
+    doc.fontSize(9).font('Helvetica-Bold').fillColor(greenDark).text('PAID BY / BILL TO', lm, y);
+    y += 14;
+    doc.font('Helvetica').fillColor('#4b5563').fontSize(8.5);
+    doc.text(customerName, lm, y);
+    y += 12;
+    if (bill.subscriber?.customer?.email) {
+      doc.text(bill.subscriber.customer.email, lm, y);
+      y += 12;
+    }
+    if (bill.subscriber?.customer?.phone) {
+      doc.text(bill.subscriber.customer.phone, lm, y);
+      y += 12;
+    }
+    if (bill.subscriber?.customer?.address) {
+      const addrH = doc.heightOfString(bill.subscriber.customer.address, { width: 200 });
+      doc.text(bill.subscriber.customer.address, lm, y, { width: 200 });
+      y += Math.max(addrH, 12);
+    }
+
+    y += 10;
+
+    const payBoxTop = y;
+    const payBoxH = 46;
+    doc.rect(lm, payBoxTop, pw, payBoxH).fill(greenLight).strokeColor(greenBorder).lineWidth(0.5).stroke();
+    doc.fontSize(8.5).font('Helvetica').fillColor('#065f46');
+    const payColX = lm + 12;
+    const payColW = (pw - 24) / 4;
+    doc.font('Helvetica-Bold').fontSize(8).fillColor(greenDark);
+    const payHeaders = ['PAYMENT METHOD', 'REFERENCE NO', 'DATE RECEIVED', 'RECEIVED BY'];
+    payHeaders.forEach((h, i) => doc.text(h, payColX + i * payColW, payBoxTop + 8, { width: payColW - 6 }));
+    doc.font('Helvetica').fillColor('#111827').fontSize(8.5);
+    doc.text('\u2014', payColX, payBoxTop + 24, { width: payColW - 6 });
+    doc.text('\u2014', payColX + payColW, payBoxTop + 24, { width: payColW - 6 });
+    doc.text(new Date(receiptDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }), payColX + payColW * 2, payBoxTop + 24, { width: payColW - 6 });
+    doc.text(receivedBy, payColX + payColW * 3, payBoxTop + 24, { width: payColW - 6 });
+    y = payBoxTop + payBoxH + 14;
+
+    const tableTop = y;
+    const colW = [18, 260, 38, 90, 95];
+    const colX = [lm];
+    for (let i = 1; i < colW.length; i++) colX[i] = colX[i - 1] + colW[i - 1];
+    const tableWidth = colW.reduce((s, w) => s + w, 0);
+    const headerH = 22;
+    const rowH = 19;
+
+    const headerTexts = ['SN', 'DESCRIPTION', 'QTY', 'UNIT PRICE', 'TOTAL PRICE'];
+    const headerAligns: ('left' | 'right')[] = ['left', 'left', 'left', 'right', 'right'];
+
+    doc.roundedRect(colX[0], tableTop, tableWidth, headerH, 2).fill(green);
+    doc.fillColor('#fff').fontSize(9).font('Helvetica-Bold');
+    for (let i = 0; i < headerTexts.length; i++) {
+      doc.text(headerTexts[i], colX[i], tableTop + 6, { width: colW[i], align: headerAligns[i] });
+    }
+
+    y = tableTop + headerH;
+    doc.rect(colX[0], y, tableWidth, rowH).fill('#f9fafb');
+    doc.fillColor('#374151').fontSize(8.5).font('Helvetica');
+    const pkgDesc = bill.description || (bill.subscriber?.package ? `${bill.subscriber.package.name} - Internet Service` : 'Internet Service');
+    doc.text('1', colX[0], y + 5, { width: colW[0], align: 'center' });
+    doc.text(pkgDesc, colX[1] + 4, y + 5, { width: colW[1] - 8, align: 'left' });
+    doc.text('1', colX[2], y + 5, { width: colW[2], align: 'center' });
+    doc.text(fmt(bill.amount), colX[3], y + 5, { width: colW[3], align: 'right' });
+    doc.text(fmt(paidAmount), colX[4], y + 5, { width: colW[4], align: 'right' });
+    y += rowH;
+
+    doc.moveTo(colX[0], y).lineTo(colX[0] + tableWidth, y).strokeColor('#d1d5db').lineWidth(0.5).stroke();
+    y += 6;
+
+    const sumX = colX[3];
+    const sumW = colW[3] + colW[4];
+    const summaryH = 16;
+    const grandBoxH = 30;
+    const totalSummaryH = summaryH + grandBoxH + 6;
+
+    doc.rect(sumX, y, sumW, totalSummaryH).fill('#f9fafb');
+    doc.font('Helvetica').fillColor('#4b5563').fontSize(9);
+    doc.text('Subtotal', sumX + 8, y + 4, { width: 80 });
+    doc.text(fmt(bill.amount), sumX + 8, y + 4, { width: sumW - 16, align: 'right' });
+    y += 16;
+    y += 3;
+    doc.roundedRect(sumX + 2, y, sumW - 4, grandBoxH, 3).fill(green);
+    doc.fillColor('#fff').fontSize(12).font('Helvetica-Bold');
+    doc.text('GRAND TOTAL', sumX + 10, y + 8, { width: 100 });
+    doc.text(fmt(paidAmount), sumX + 10, y + 8, { width: sumW - 20, align: 'right' });
+    y += grandBoxH + 10;
+
+    doc.fontSize(8.5).font('Helvetica').fillColor('#4b5563');
+    doc.text('Amount Paid', sumX + 8, y, { width: 80 });
+    doc.font('Helvetica-Bold').fillColor(greenDark);
+    doc.text(fmt(paidAmount), sumX + 8, y, { width: sumW - 16, align: 'right' });
+    y += 16;
+    doc.font('Helvetica').fillColor('#4b5563');
+    doc.text('Balance', sumX + 8, y, { width: 80 });
+    doc.font('Helvetica-Bold').fillColor('#059669');
+    doc.text(fmt(Math.max(0, Number(bill.amount) - paidAmount)), sumX + 8, y, { width: sumW - 16, align: 'right' });
+    y += 22;
+
+    doc.fontSize(8.5).font('Helvetica').fillColor('#4b5563');
+    doc.text('Amount Received in Words:', lm, y, { width: 120 });
+    const wordsText = `${numberToWords(paidAmount)} only`;
+    doc.font('Helvetica-Bold').fillColor('#111827');
+    doc.text(wordsText, lm + 120, y, { width: pw - 120 });
+    y += Math.max(doc.heightOfString(wordsText, { width: pw - 120 }), 12) + 12;
+
+    doc.roundedRect(lm, y, pw, 44, 3);
+    doc.strokeColor(green).lineWidth(0.5).dash(3, 3).stroke();
+    doc.undash();
+    doc.fontSize(8).font('Helvetica').fillColor('#6b7280').text('VERIFICATION CODE', lm + 12, y + 7, { width: pw - 24 });
+    doc.font('Helvetica-Bold').fillColor(greenDark).fontSize(11).text(verifyCode, lm + 12, y + 21, { width: pw - 24 });
+    doc.font('Helvetica').fillColor('#9ca3af').fontSize(7.5).text('This document is cryptographically signed and can be verified against the original billing record.', lm + 12, y + 36, { width: pw - 24 });
+    y += 56;
+
+    if (y + 90 > doc.page.height - 45) {
+      doc.addPage();
+      y = 45;
+    }
+    doc.fontSize(9).font('Helvetica-Bold').fillColor('#111827').text('RECEIVED BY', lm, y);
+    doc.text('AUTHORIZED SIGNATURE', rm - 200, y);
+    y += 14;
+    doc.font('Helvetica').fillColor('#4b5563').fontSize(9);
+    doc.text(receivedBy, lm, y);
+    doc.moveTo(rm - 200, y + 2).lineTo(rm - 30, y + 2).strokeColor('#9ca3af').lineWidth(0.5).stroke();
+    y += 34;
+
+    try {
+      const s = doc.openImage(path.join(__dirname, '../../uploads/stamp.png'));
+      const ss = Math.min(110 / s.width, 110 / s.height);
+      const sw = s.width * ss, sh = s.height * ss;
+      doc.save();
+      doc.translate(lm + 120, y - 8 - sh);
+      doc.rotate(-6, { origin: [sw / 2, sh / 2] });
+      doc.image(s, 0, 0, { width: sw, height: sh });
+      doc.restore();
+    } catch (_) { /* skip */ }
+
+    y += 20;
+    if (y + 32 > doc.page.height - 45) {
+      doc.addPage();
+      y = 45;
+    }
+    const footY = y;
+    doc.rect(0, footY - 6, doc.page.width, 32).fill(green);
+    doc.fillColor('#fff').fontSize(7.5).font('Helvetica');
+    const footerParts = [companyName];
+    if (companyEmail) footerParts.push(companyEmail);
+    if (companyWebsite) footerParts.push(companyWebsite);
+    doc.text(footerParts.join('  |  '), lm, footY + 3, { align: 'center', width: pw });
+    doc.text(`Receipt #${receiptNumber}  |  Generated ${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString('en-GB')}`, lm, footY + 16, { align: 'center', width: pw });
+
+    doc.end();
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to generate receipt' });
   }
 });
 

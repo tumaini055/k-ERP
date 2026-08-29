@@ -387,6 +387,10 @@ export const dataService = {
     const { data } = await api.post('/isp/billing', body);
     return data;
   },
+  async getISPBillingReceipts(params?: any) {
+    const { data } = await api.get('/isp/billing/receipts', { params });
+    return data;
+  },
   async updateISPBilling(id: string, body: any) {
     const { data } = await api.put(`/isp/billing/${id}`, body);
     return data;
@@ -446,6 +450,32 @@ export const dataService = {
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error('PDF download failed:', err);
+      throw err;
+    }
+  },
+  async downloadISPBillingReceiptPdf(billingId: string) {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/isp/billing/${billingId}/receipt`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || `Download failed: ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const contentDisp = res.headers.get('content-disposition');
+      const match = contentDisp?.match(/filename="(.+?)"/);
+      a.download = match ? match[1] : `isp-receipt-${billingId.slice(0, 8)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Receipt PDF download failed:', err);
       throw err;
     }
   },

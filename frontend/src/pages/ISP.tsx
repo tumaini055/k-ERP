@@ -88,6 +88,10 @@ export default function ISP() {
   const [finalizingMonth, setFinalizingMonth] = useState<string | null>(null);
   const [showMonthlyColl, setShowMonthlyColl] = useState(true);
   const [monthlyYearFilter, setMonthlyYearFilter] = useState('all');
+  const [receipts, setReceipts] = useState<any[]>([]);
+  const [receiptsLoading, setReceiptsLoading] = useState(false);
+  const [showReceipts, setShowReceipts] = useState(true);
+  const [receiptsSearch, setReceiptsSearch] = useState('');
   const [dismissedNotifs, setDismissedNotifs] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('isp_dismissed_notifs') || '[]'); } catch { return []; }
   });
@@ -125,6 +129,8 @@ export default function ISP() {
     loadStats();
     loadMonthlyCollections();
   }, [search, statusFilter, pkgFilter]);
+
+  useEffect(() => { loadReceipts(receiptsSearch || undefined); }, [receiptsSearch]);
 
   const loadData = async (params?: any) => {
     setLoading(true);
@@ -178,6 +184,15 @@ export default function ISP() {
       setMonthlyCollections(res.data || []);
     } catch (error) { setMonthlyCollections([]); }
     setMonthlyCollLoading(false);
+  };
+
+  const loadReceipts = async (search?: string) => {
+    setReceiptsLoading(true);
+    try {
+      const res = await dataService.getISPBillingReceipts(search ? { search } : undefined);
+      setReceipts(res.data || []);
+    } catch (error) { setReceipts([]); }
+    setReceiptsLoading(false);
   };
 
   const handleFinalizeMonth = async (ym: string) => {
@@ -235,6 +250,17 @@ export default function ISP() {
   };
 
   const closeDetail = () => { setEditingSub(false); setSelectedSub(null); setSubDetail(null); setSubBilling([]); };
+
+  const openSubFromReceipt = async (subCode: string) => {
+    try {
+      const res = await dataService.getISPSubscribers({ subscriber_code: subCode, limit: 1 });
+      const sub = res.data?.[0];
+      if (sub) {
+        await openSubDetail(sub);
+        setDetailTab('billing');
+      }
+    } catch (error) { toast.error('Subscriber not found'); }
+  };
 
   const openAddPkg = () => {
     setEditingPkg(null);
@@ -423,6 +449,7 @@ export default function ISP() {
       setPayAmount(0);
       if (selectedSub) loadBilling(selectedSub.id);
       loadStats();
+      loadReceipts(receiptsSearch || undefined);
     } catch (error) { toast.error('Failed to record payment'); }
   };
 
@@ -508,7 +535,7 @@ export default function ISP() {
           <button onClick={() => setShowBulkSms(true)} className="btn-secondary">
             <MessageSquare size={16} className="mr-1" /> Bulk SMS
           </button>
-          <button onClick={() => { loadData(); loadPackages(); loadStats(); }} className="btn-secondary">
+          <button onClick={() => { loadData(); loadPackages(); loadStats(); loadReceipts(receiptsSearch || undefined); }} className="btn-secondary">
             <RefreshCw size={16} className="mr-1" /> Refresh
           </button>
           <button onClick={openAddPkg} className="btn-secondary">
@@ -628,6 +655,83 @@ export default function ISP() {
                           Finalize
                         </button>
                       )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        )}
+      </div>
+
+      {/* Receipts - Paid Invoices */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <button onClick={() => setShowReceipts(!showReceipts)} className="text-sm font-semibold text-surface-700 dark:text-surface-300 flex items-center gap-2 hover:text-surface-900">
+            <CheckCircle2 size={16} className="text-green-500" /> Receipts ({receipts.length})
+            <ChevronDown size={14} className={`transition-transform ${showReceipts ? '' : '-rotate-90'}`} />
+            {receiptsLoading && <RefreshCw size={14} className="animate-spin text-surface-400" />}
+          </button>
+          <div className="flex items-center gap-2">
+            {showReceipts && (
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-400" />
+                <input
+                  className="input pl-9 w-56 text-xs py-1.5"
+                  placeholder="Search subscriber or customer..."
+                  value={receiptsSearch}
+                  onChange={e => setReceiptsSearch(e.target.value)}
+                />
+              </div>
+            )}
+            <button onClick={() => loadReceipts(receiptsSearch || undefined)} className="btn-secondary text-xs py-1.5 px-3">
+              <RefreshCw size={14} className="mr-1" /> Refresh
+            </button>
+          </div>
+        </div>
+        {showReceipts && (
+        <div className="table-container">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Receipt No</th>
+                <th>Subscriber</th>
+                <th>Customer</th>
+                <th>Package / Description</th>
+                <th className="text-right">Amount</th>
+                <th className="text-right">Paid</th>
+                <th>Paid On</th>
+                <th>Status</th>
+                <th className="text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {receiptsLoading ? (
+                <tr><td colSpan={9} className="text-center py-10"><RefreshCw size={20} className="mx-auto animate-spin text-surface-400" /></td></tr>
+              ) : receipts.length === 0 ? (
+                <tr><td colSpan={9} className="text-center py-10 text-surface-400 text-sm">No paid invoices yet — receipts will appear here once a payment is recorded.</td></tr>
+              ) : (
+                receipts.map((r: any) => (
+                  <tr key={r.id} className="hover:bg-surface-50 dark:hover:bg-surface-700/50">
+                    <td className="font-mono text-xs font-medium">{`RCT-${r.id.slice(0, 8).toUpperCase()}`}</td>
+                    <td>
+                      <button onClick={() => openSubFromReceipt(r.subscriber?.subscriber_code)} className="font-mono text-xs text-primary-600 hover:underline" title="Open subscriber billing">
+                        {r.subscriber?.subscriber_code || '-'}
+                      </button>
+                    </td>
+                    <td className="font-medium text-sm">{r.subscriber?.customer?.company_name || r.subscriber?.customer?.contact_person || '-'}</td>
+                    <td className="text-sm">{r.description || (r.subscriber?.package ? r.subscriber.package.name : 'Internet Service')}</td>
+                    <td className="text-right text-sm font-medium">{formatCurrency(r.amount)}</td>
+                    <td className="text-right text-sm font-medium text-emerald-600">{formatCurrency(r.paid_amount)}</td>
+                    <td className="text-xs text-surface-500">{r.paid_at ? formatDate(r.paid_at) : formatDate(r.updated_at)}</td>
+                    <td>
+                      <span className={billStatusColors[r.status]}>{getStatusLabel(r.status)}</span>
+                    </td>
+                    <td className="text-center">
+                      <button onClick={() => dataService.downloadISPBillingReceiptPdf(r.id).catch(() => toast.error('Failed to create receipt'))} className="btn-success text-xs py-1.5 px-2.5">
+                        <CheckCircle2 size={12} className="mr-1" /> Create Receipt
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -1063,9 +1167,14 @@ export default function ISP() {
                                 <button onClick={() => { setEditingBillId(bill.id); setEditDescription(bill.description || ''); }} className="btn-secondary text-xs py-1 px-2" title="Edit description">
                                   <span className="text-[10px]">Edit</span>
                                 </button>
-                                <button onClick={() => dataService.downloadISPBillingPdf(bill.id).catch(() => toast.error('Failed to download PDF'))} className="btn-secondary text-xs py-1 px-2">
+                                <button onClick={() => dataService.downloadISPBillingPdf(bill.id).catch(() => toast.error('Failed to download PDF'))} className="btn-secondary text-xs py-1 px-2" title="Download invoice PDF">
                                   <Download size={12} />
                                 </button>
+                                {bill.paid_amount > 0 && (
+                                  <button onClick={() => dataService.downloadISPBillingReceiptPdf(bill.id).catch(() => toast.error('Failed to download receipt'))} className="btn-success text-xs py-1 px-2" title="Download receipt">
+                                    <CheckCircle2 size={12} className="mr-0.5" />Receipt
+                                  </button>
+                                )}
                                 {bill.status !== 'paid' && (
                                   <button onClick={() => { setPayingBill(bill); setPayAmount(outstanding); setShowPayModal(true); }} className="btn-primary text-xs py-1 px-2">
                                     <CreditCard size={12} className="mr-1" />Pay
@@ -1078,6 +1187,7 @@ export default function ISP() {
                                     toast.success('Invoice deleted');
                                     if (selectedSub) loadBilling(selectedSub.id);
                                     loadStats();
+                                    loadReceipts(receiptsSearch || undefined);
                                   } catch (error) { toast.error('Failed to delete invoice'); }
                                 }} className="btn-secondary text-xs py-1 px-2 text-red-500 hover:text-red-700" title="Delete invoice">
                                   <X size={12} />
