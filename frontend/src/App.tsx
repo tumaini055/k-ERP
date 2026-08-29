@@ -20,6 +20,7 @@ import Organization from './pages/Organization';
 import Settings from './pages/Settings';
 import Profile from './pages/Profile';
 import OfficialLetters from './pages/OfficialLetters';
+import VFD from './pages/VFD';
 
 export default function App() {
   return (
@@ -53,6 +54,7 @@ export default function App() {
             <Route path="settings" element={<Settings />} />
             <Route path="profile" element={<Profile />} />
             <Route path="letters" element={<OfficialLetters />} />
+            <Route path="vfd" element={<VFD />} />
           </Route>
         </Routes>
       </AuthProvider>

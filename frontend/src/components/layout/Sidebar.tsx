@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, FolderKanban, Headphones,
   Package, Wifi, DollarSign, ShoppingCart, FileText,
   BarChart3, Settings, UserCircle, Building2, FileSpreadsheet,
-  Calendar, Bell, ClipboardList, Clock, ChevronLeft, ChevronRight, User, PenSquare,
+  Calendar, Bell, ClipboardList, Clock, ChevronLeft, ChevronRight, User, PenSquare, Receipt,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -26,6 +26,7 @@ const menuItems = [
   { path: '/letters', label: 'Official Letters', icon: PenSquare, roles: ['super_admin', 'ceo', 'managing_director', 'marketing_officer', 'accountant'] },
   { path: '/organization', label: 'Org Chart', icon: Building2, roles: ['super_admin', 'ceo', 'managing_director', 'accountant', 'engineer', 'marketing_officer'] },
   { path: '/reports', label: 'Reports', icon: BarChart3, roles: ['super_admin', 'ceo', 'managing_director', 'accountant'] },
+  { path: '/vfd', label: 'TRA Receipts', icon: Receipt, roles: ['super_admin', 'ceo', 'managing_director', 'accountant'] },
 ];
 
 interface SidebarProps {

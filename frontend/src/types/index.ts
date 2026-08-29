@@ -426,3 +426,122 @@ export interface CashRequest {
 }
 
 export type CashRequestStatus = 'pending' | 'approved' | 'rejected' | 'disbursed' | 'cancelled';
+
+export interface VfdConfig {
+  id?: string;
+  company_id?: string;
+  tin?: string;
+  vrn?: string;
+  business_name?: string;
+  business_address?: string;
+  tax_office?: string;
+  tax_region?: string;
+  efd_serial?: string;
+  certkey?: string;
+  regid?: string;
+  uin?: string;
+  receipt_code?: string;
+  cert_serial?: string;
+  cert_private_key?: string;
+  environment?: 'test' | 'production';
+  api_username?: string;
+  api_password?: string;
+  token?: string;
+  token_expires_at?: string;
+  routing_key?: string;
+  gc?: number;
+  dc?: number;
+  z_date?: string;
+  next_receipt_number?: number;
+  receipt_prefix?: string;
+  auto_submit?: boolean;
+  default_tax_rate?: number;
+  currency?: string;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface VfdReceipt {
+  id: string;
+  company_id?: string;
+  sale_id?: string;
+  source_type?: string;
+  receipt_number: string;
+  rctnum?: string;
+  dc?: number;
+  gc?: number;
+  znum?: string;
+  rctvnum?: string;
+  receipt_date?: string;
+  receipt_time?: string;
+  tin?: string;
+  vrn?: string;
+  efd_serial?: string;
+  regid?: string;
+  uin?: string;
+  verification_code?: string;
+  verification_url?: string;
+  customer_name?: string;
+  customer_tin?: string;
+  customer_mobile?: string;
+  customer_id_type?: number;
+  customer_id?: string;
+  subtotal?: number;
+  discount?: number;
+  tax_amount?: number;
+  total_amount?: number;
+  currency?: string;
+  payment_type?: string;
+  status: 'pending' | 'submitted' | 'accepted' | 'rejected' | 'failed' | 'voided';
+  ack_code?: number;
+  ack_message?: string;
+  request_payload?: string;
+  response_payload?: string;
+  retry_count?: number;
+  last_attempt_at?: string;
+  void_reason?: string;
+  created_by?: string;
+  items?: VfdReceiptItem[];
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface VfdReceiptItem {
+  id: string;
+  receipt_id: string;
+  item_id?: string;
+  description: string;
+  quantity: number;
+  unit_price?: number;
+  tax_code?: number;
+  tax_rate?: string;
+  amount?: number;
+  sort_order?: number;
+}
+
+export interface VfdTaxRate {
+  id: string;
+  company_id?: string;
+  code: string;
+  name: string;
+  rate: number;
+  tra_tax_code: number;
+  description?: string;
+  is_active?: boolean;
+}
+
+export interface VfdApiLog {
+  id: string;
+  company_id?: string;
+  action: string;
+  endpoint?: string;
+  request_payload?: string;
+  response_payload?: string;
+  status?: string;
+  ack_code?: number;
+  ack_message?: string;
+  error_message?: string;
+  duration_ms?: number;
+  created_at: string;
+}

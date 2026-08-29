@@ -913,4 +913,66 @@ export const dataService = {
       throw err;
     }
   },
+
+  // TRA VFD Fiscal Receipts
+  async getVfdStatus() {
+    const { data } = await api.get('/vfd/status');
+    return data;
+  },
+  async getVfdConfig() {
+    const { data } = await api.get('/vfd/config');
+    return data;
+  },
+  async saveVfdConfig(body: any) {
+    const { data } = await api.put('/vfd/config', body);
+    return data;
+  },
+  async fetchTraToken() {
+    const { data } = await api.post('/vfd/token');
+    return data;
+  },
+  async registerVfd() {
+    const { data } = await api.post('/vfd/register');
+    return data;
+  },
+  async testTraConnection() {
+    const { data } = await api.post('/vfd/test-connection');
+    return data;
+  },
+  async getVfdTaxRates() {
+    const { data } = await api.get('/vfd/tax-rates');
+    return data;
+  },
+  async createVfdTaxRate(body: any) {
+    const { data } = await api.post('/vfd/tax-rates', body);
+    return data;
+  },
+  async updateVfdTaxRate(id: string, body: any) {
+    const { data } = await api.put(`/vfd/tax-rates/${id}`, body);
+    return data;
+  },
+  async getVfdReceipts(params?: any) {
+    const { data } = await api.get('/vfd/receipts', { params });
+    return data;
+  },
+  async getVfdReceipt(id: string) {
+    const { data } = await api.get(`/vfd/receipts/${id}`);
+    return data;
+  },
+  async createVfdReceipt(body: any) {
+    const { data } = await api.post('/vfd/receipts', body);
+    return data;
+  },
+  async submitVfdReceipt(id: string, body?: any) {
+    const { data } = await api.post(`/vfd/receipts/${id}/submit`, body || {});
+    return data;
+  },
+  async voidVfdReceipt(id: string, reason: string) {
+    const { data } = await api.post(`/vfd/receipts/${id}/void`, { reason });
+    return data;
+  },
+  async getVfdLogs(params?: any) {
+    const { data } = await api.get('/vfd/logs', { params });
+    return data;
+  },
 };
