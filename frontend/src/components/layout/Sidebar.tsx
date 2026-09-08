@@ -4,8 +4,8 @@ import { cn } from '../../lib/utils';
 import {
   LayoutDashboard, Users, FolderKanban, Headphones,
   Package, Wifi, DollarSign, ShoppingCart, FileText,
-  BarChart3, Settings, UserCircle, Building2, FileSpreadsheet,
-  Calendar, Bell, ClipboardList, Clock, ChevronLeft, ChevronRight, User, PenSquare, Receipt,
+  BarChart3, Settings,   UserCircle, Building2, FileSpreadsheet,
+  Calendar, Bell, ClipboardList, Clock, ChevronLeft, ChevronRight, User, PenSquare, Receipt, Truck,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -22,6 +22,7 @@ const menuItems = [
   { path: '/finance', label: 'Finance', icon: DollarSign, roles: ['super_admin', 'ceo', 'managing_director', 'accountant', 'customer'] },
   { path: '/contracts', label: 'Contracts', icon: ClipboardList, roles: ['super_admin', 'ceo', 'managing_director', 'accountant', 'marketing_officer'] },
   { path: '/documents', label: 'Documents', icon: FileText, roles: ['super_admin', 'ceo', 'managing_director', 'engineer', 'marketing_officer', 'customer'] },
+  { path: '/delivery-notes', label: 'Delivery Notes', icon: Truck, roles: ['super_admin', 'ceo', 'managing_director', 'accountant', 'engineer', 'marketing_officer'] },
   { path: '/calendar', label: 'Calendar', icon: Calendar, roles: ['super_admin', 'ceo', 'managing_director', 'engineer', 'marketing_officer'] },
   { path: '/letters', label: 'Official Letters', icon: PenSquare, roles: ['super_admin', 'ceo', 'managing_director', 'marketing_officer', 'accountant'] },
   { path: '/organization', label: 'Org Chart', icon: Building2, roles: ['super_admin', 'ceo', 'managing_director', 'accountant', 'engineer', 'marketing_officer'] },

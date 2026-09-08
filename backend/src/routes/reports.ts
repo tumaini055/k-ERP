@@ -1058,7 +1058,16 @@ router.get('/financial/pdf', checkPermission('reports', 'canView'), async (req: 
 
       // Rows
       for (let r = 0; r < rows.length; r++) {
-        if (y + rowH > 750) {
+        // Compute this row's height from the tallest wrapping cell (e.g. long descriptions)
+        let cellMaxH = 0;
+        for (let i = 0; i < rows[r].length; i++) {
+          const h = doc.heightOfString(String(rows[r][i]), { width: colWidths[i] - 8 });
+          if (h > cellMaxH) cellMaxH = h;
+        }
+        const lines = Math.max(Math.ceil(cellMaxH / 12), 1);
+        const rh = Math.max(rowH, lines * 13 + 8);
+
+        if (y + rh > 750) {
           startNewPage();
           y = 45;
           // Re-draw header on new page
@@ -1073,17 +1082,17 @@ router.get('/financial/pdf', checkPermission('reports', 'canView'), async (req: 
         }
 
         const isEven = r % 2 === 0;
-        doc.rect(startX, y, tableWidth, rowH).fill(isEven ? '#f9fafb' : '#ffffff');
+        doc.rect(startX, y, tableWidth, rh).fill(isEven ? '#f9fafb' : '#ffffff');
         doc.font('Helvetica').fontSize(8).fillColor('#374151');
         x = startX;
         for (let i = 0; i < rows[r].length; i++) {
           const cellText = rows[r][i];
           const isNegative = cellText.includes('-') && cellText.includes(currencySymbol.trim());
           doc.fillColor(isNegative ? '#dc2626' : '#374151');
-          doc.text(cellText, x + 4, y + 5, { width: colWidths[i] - 8, align: aligns[i] });
+          doc.text(cellText, x + 4, y + (rh - 9) / 2, { width: colWidths[i] - 8, align: aligns[i] });
           x += colWidths[i];
         }
-        y += rowH;
+        y += rh;
       }
 
       // Bottom border

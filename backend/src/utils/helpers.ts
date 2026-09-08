@@ -22,6 +22,18 @@ export const generateProjectCode = (): string => {
   return `PRJ-${year}-${num}`;
 };
 
+export const generateDeliveryNumber = (): string => {
+  const year = new Date().getFullYear();
+  const num = Math.floor(Math.random() * 9999).toString().padStart(4, '0');
+  return `DN-${year}-${num}`;
+};
+
+export const generateHandoverNumber = (): string => {
+  const year = new Date().getFullYear();
+  const num = Math.floor(Math.random() * 9999).toString().padStart(4, '0');
+  return `HO-${year}-${num}`;
+};
+
 export const calculatePagination = (page: number = 1, limit: number = 10) => {
   const offset = (page - 1) * limit;
   return { offset, limit, page };

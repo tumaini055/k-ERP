@@ -306,6 +306,10 @@ export default function Finance() {
     e.preventDefault();
     const validItems = invItems.filter(i => i.description && i.quantity > 0);
     if (validItems.length === 0) { toast.error('Add at least one item'); return; }
+    if (invForm.invoice_type === 'quotation' && !invForm.project_id) {
+      toast.error('Please select a project for this quotation (required for handover documents)');
+      return;
+    }
     try {
       const body = { ...invForm, items: validItems };
       if (editingInv) {
@@ -997,9 +1001,9 @@ export default function Finance() {
                   </select>
                 </div>
                 <div>
-                  <label className="label">Project (optional)</label>
+                  <label className="label">{invForm.invoice_type === 'quotation' ? 'Project *' : 'Project (optional)'}</label>
                   <select className="input" value={invForm.project_id} onChange={e => setInvForm({...invForm, project_id: e.target.value})}>
-                    <option value="">No project</option>
+                    <option value="">{invForm.invoice_type === 'quotation' ? 'Select project' : 'No project'}</option>
                     {projects.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>

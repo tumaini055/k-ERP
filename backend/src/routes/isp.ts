@@ -1004,15 +1004,19 @@ router.get('/billing/:id/pdf', checkPermission('isp', 'canView'), async (req: Au
     y += headerH;
 
     const pkgDesc = bill.description || (bill.subscriber?.package ? `${bill.subscriber.package.name} - Internet Service` : 'Internet Service');
+    const descText = pkgDesc.length > 250 ? pkgDesc.slice(0, 250) + '...' : pkgDesc;
+    const descH = doc.heightOfString(descText, { width: colW[1] - 8 });
+    const descLines = Math.max(Math.ceil(descH / 12), 1);
+    const rh = Math.max(rowH, descLines * 13 + 8);
     doc.fontSize(8.5).font('Helvetica').fillColor('#374151');
-    doc.rect(colX[0], y, tableWidth, rowH).fill('#f9fafb');
+    doc.rect(colX[0], y, tableWidth, rh).fill('#f9fafb');
     doc.fillColor('#374151');
-    doc.text('1', colX[0], y + 5, { width: colW[0], align: 'center' });
-    doc.text(pkgDesc, colX[1] + 4, y + 5, { width: colW[1] - 8, align: 'left' });
-    doc.text('1', colX[2], y + 5, { width: colW[2], align: 'center' });
-    doc.text(`${currencySymbol}${Number(bill.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}`, colX[3], y + 5, { width: colW[3], align: 'right' });
-    doc.text(`${currencySymbol}${Number(bill.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}`, colX[4], y + 5, { width: colW[4], align: 'right' });
-    y += rowH;
+    doc.text('1', colX[0], y + (rh - 9) / 2, { width: colW[0], align: 'center' });
+    doc.text(descText, colX[1] + 4, y + 5, { width: colW[1] - 8, align: 'left' });
+    doc.text('1', colX[2], y + (rh - 9) / 2, { width: colW[2], align: 'center' });
+    doc.text(`${currencySymbol}${Number(bill.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}`, colX[3], y + (rh - 9) / 2, { width: colW[3], align: 'right' });
+    doc.text(`${currencySymbol}${Number(bill.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}`, colX[4], y + (rh - 9) / 2, { width: colW[4], align: 'right' });
+    y += rh;
 
     doc.moveTo(colX[0], y).lineTo(colX[0] + tableWidth, y).strokeColor('#d1d5db').lineWidth(0.5).stroke();
     y += 6;
@@ -1358,15 +1362,19 @@ router.get('/billing/:id/receipt', checkPermission('isp', 'canView'), async (req
     }
 
     y = tableTop + headerH;
-    doc.rect(colX[0], y, tableWidth, rowH).fill('#f9fafb');
-    doc.fillColor('#374151').fontSize(8.5).font('Helvetica');
     const pkgDesc = bill.description || (bill.subscriber?.package ? `${bill.subscriber.package.name} - Internet Service` : 'Internet Service');
-    doc.text('1', colX[0], y + 5, { width: colW[0], align: 'center' });
-    doc.text(pkgDesc, colX[1] + 4, y + 5, { width: colW[1] - 8, align: 'left' });
-    doc.text('1', colX[2], y + 5, { width: colW[2], align: 'center' });
-    doc.text(fmt(bill.amount), colX[3], y + 5, { width: colW[3], align: 'right' });
-    doc.text(fmt(paidAmount), colX[4], y + 5, { width: colW[4], align: 'right' });
-    y += rowH;
+    const descText = pkgDesc.length > 250 ? pkgDesc.slice(0, 250) + '...' : pkgDesc;
+    const descH = doc.heightOfString(descText, { width: colW[1] - 8 });
+    const descLines = Math.max(Math.ceil(descH / 12), 1);
+    const rh = Math.max(rowH, descLines * 13 + 8);
+    doc.rect(colX[0], y, tableWidth, rh).fill('#f9fafb');
+    doc.fillColor('#374151').fontSize(8.5).font('Helvetica');
+    doc.text('1', colX[0], y + (rh - 9) / 2, { width: colW[0], align: 'center' });
+    doc.text(descText, colX[1] + 4, y + 5, { width: colW[1] - 8, align: 'left' });
+    doc.text('1', colX[2], y + (rh - 9) / 2, { width: colW[2], align: 'center' });
+    doc.text(fmt(bill.amount), colX[3], y + (rh - 9) / 2, { width: colW[3], align: 'right' });
+    doc.text(fmt(paidAmount), colX[4], y + (rh - 9) / 2, { width: colW[4], align: 'right' });
+    y += rh;
 
     doc.moveTo(colX[0], y).lineTo(colX[0] + tableWidth, y).strokeColor('#d1d5db').lineWidth(0.5).stroke();
     y += 6;

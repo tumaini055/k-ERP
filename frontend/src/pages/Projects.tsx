@@ -8,7 +8,7 @@ import {
   X, Edit2, Trash2, ChevronRight, RefreshCw, List, Columns,
   Calendar, User, Target, DollarSign, FileText, BarChart3,
   Circle, CheckCircle2, Timer, PlusCircle, Users,
-  Receipt, CreditCard,
+  Receipt, CreditCard, Camera, Upload,
 } from 'lucide-react';
 
 const statusStyles: Record<string, string> = {
@@ -39,6 +39,14 @@ export default function Projects() {
   const [detailTab, setDetailTab] = useState<'overview' | 'tasks' | 'milestones' | 'time' | 'expenses' | 'invoices'>('overview');
   const [projectInvoices, setProjectInvoices] = useState<any[]>([]);
   const [projectInvoiceSummary, setProjectInvoiceSummary] = useState<any>(null);
+
+  const [projectQuotations, setProjectQuotations] = useState<any[]>([]);
+  const [selectedQuotationId, setSelectedQuotationId] = useState<string>('');
+
+  const [handoverPhotos, setHandoverPhotos] = useState<string[]>([]);
+  const [pendingPhotos, setPendingPhotos] = useState<File[]>([]);
+  const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
 
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -89,10 +97,53 @@ export default function Projects() {
       setProjectFinancials(financials);
       setProjectInvoices(invData?.data || []);
       setProjectInvoiceSummary(invData?.summary || null);
+
+      // Gather quotations: project-linked first, then customer fallback
+      let quotations = (invData?.data || []).filter((i: any) => i.invoice_type === 'quotation');
+      if (quotations.length === 0 && detail?.customer_id) {
+        try {
+          const custInvoices = await dataService.getInvoices({ customer_id: detail.customer_id, limit: 100 });
+          quotations = (custInvoices?.data || []).filter((i: any) => i.invoice_type === 'quotation');
+        } catch (e) {}
+      }
+      setProjectQuotations(quotations);
+      setSelectedQuotationId(quotations[0]?.id || '');
+      setHandoverPhotos([]);
+      setPendingPhotos([]);
+      setPhotoPreviews([]);
+      try {
+        const ph = await dataService.getHandoverPhotos(project.id);
+        setHandoverPhotos(ph);
+      } catch (e) {}
     } catch (error) { console.error(error); }
   };
 
-  const closeDetail = () => { setSelectedProject(null); setProjectDetail(null); setDetailTab('overview'); setProjectInvoices([]); setProjectInvoiceSummary(null); };
+  const closeDetail = () => { setSelectedProject(null); setProjectDetail(null); setDetailTab('overview'); setProjectInvoices([]); setProjectInvoiceSummary(null); setProjectQuotations([]); setSelectedQuotationId(''); setHandoverPhotos([]); setPendingPhotos([]); setPhotoPreviews([]); };
+
+  const handlePhotoFiles = (files: FileList | null) => {
+    if (!files) return;
+    const picked = Array.from(files).slice(0, 4);
+    setPendingPhotos(picked);
+    const urls = picked.map((f) => URL.createObjectURL(f));
+    setPhotoPreviews((prev) => { prev.forEach((u) => URL.revokeObjectURL(u)); return urls; });
+  };
+
+  const handleUploadPhotos = async () => {
+    if (!selectedProject || pendingPhotos.length === 0) return;
+    setUploadingPhotos(true);
+    try {
+      await dataService.uploadHandoverPhotos(selectedProject.id, pendingPhotos);
+      toast.success('Handover photos uploaded');
+      const ph = await dataService.getHandoverPhotos(selectedProject.id);
+      setHandoverPhotos(ph);
+      setPendingPhotos([]);
+      setPhotoPreviews((prev) => { prev.forEach((u) => URL.revokeObjectURL(u)); return []; });
+    } catch (err: any) {
+      toast.error(err?.message || 'Photo upload failed');
+    } finally {
+      setUploadingPhotos(false);
+    }
+  };
 
   const handleDeleteProject = async (id: string) => {
     if (!confirm('Delete this project permanently?')) return;
@@ -389,12 +440,31 @@ export default function Projects() {
                     <p className="text-xs text-surface-400">Recorded Revenue</p>
                     <p className="truncate text-sm font-bold text-blue-600">{formatCurrency(projectFinancials.recorded_revenue)}</p>
                   </div>
-                  <button
-                    onClick={() => dataService.downloadProjectReport(p.id)}
-                    className="btn-secondary text-xs px-3 py-1.5"
-                  >
-                    <FileText size={14} className="mr-1" /> Download PDF Report
-                  </button>
+                  <div className="space-x-2 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => dataService.downloadProjectReport(p.id)}
+                      className="btn-secondary text-xs px-3 py-1.5"
+                    >
+                      <FileText size={14} className="mr-1" /> Download PDF Report
+                    </button>
+                    {projectQuotations.length > 0 && (
+                      <select
+                        value={selectedQuotationId}
+                        onChange={(e) => setSelectedQuotationId(e.target.value)}
+                        className="input w-40 text-xs py-1"
+                      >
+                        {projectQuotations.map((q: any) => (
+                          <option key={q.id} value={q.id}>{q.invoice_number}</option>
+                        ))}
+                      </select>
+                    )}
+                    <button
+                      onClick={() => dataService.downloadProjectHandover(p.id, selectedQuotationId)}
+                      className="btn-primary text-xs px-3 py-1.5"
+                    >
+                      <FileText size={14} className="mr-1" /> Handover Document
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div>
@@ -579,6 +649,65 @@ export default function Projects() {
             >
               <FileText size={14} className="mr-1" /> Download PDF Report
             </button>
+            {projectQuotations.length > 0 && (
+              <select
+                value={selectedQuotationId}
+                onChange={(e) => setSelectedQuotationId(e.target.value)}
+                className="mt-3 input w-40 text-xs py-1 mx-1"
+              >
+                {projectQuotations.map((q: any) => (
+                  <option key={q.id} value={q.id}>{q.invoice_number}</option>
+                ))}
+              </select>
+            )}
+            <button
+              onClick={() => dataService.downloadProjectHandover(projectDetail.id, selectedQuotationId)}
+              className="mt-3 btn-primary text-xs px-3 py-1.5"
+            >
+              <FileText size={14} className="mr-1" /> Handover Document
+            </button>
+
+            <div className="mt-4 border-t border-accent-200 pt-3 text-left dark:border-accent-800">
+              <p className="text-xs font-medium text-accent-700 dark:text-accent-400">
+                Handover Photos
+                {handoverPhotos.length > 0 && <span className="text-surface-500"> ({handoverPhotos.length}/4 uploaded)</span>}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {handoverPhotos.map((p, i) => (
+                  <img key={i} src={p} alt={`photo-${i + 1}`} className="h-14 w-14 rounded object-cover border border-accent-200" />
+                ))}
+                {[...Array(Math.max(0, 4 - handoverPhotos.length - pendingPhotos.length))].map((_, i) => (
+                  <div key={`empty-${i}`} className="flex h-14 w-14 items-center justify-center rounded border border-dashed border-accent-300 text-accent-300">
+                    <Camera size={16} />
+                  </div>
+                ))}
+                {photoPreviews.map((p, i) => (
+                  <img key={`prev-${i}`} src={p} alt={`preview-${i + 1}`} className="h-14 w-14 rounded object-cover border border-green-400" />
+                ))}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <label className="btn-secondary text-xs px-3 py-1.5 cursor-pointer">
+                  <Camera size={14} className="mr-1" /> Choose Photos (up to 4)
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    hidden
+                    onChange={(e) => handlePhotoFiles(e.target.files)}
+                  />
+                </label>
+                <button
+                  onClick={handleUploadPhotos}
+                  disabled={uploadingPhotos || pendingPhotos.length === 0}
+                  className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50"
+                >
+                  <Upload size={14} className="mr-1" /> {uploadingPhotos ? 'Uploading...' : 'Upload Photos'}
+                </button>
+              </div>
+              <p className="mt-2 text-[11px] text-surface-500">
+                Upload up to 4 photos (before/installation/equipment/final). They will appear in the handover PDF's Photo &amp; Evidence section.
+              </p>
+            </div>
           </div>
         )}
 

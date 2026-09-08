@@ -32,6 +32,21 @@ export const authService = {
     return data;
   },
 
+  async requestPasswordReset(email: string): Promise<any> {
+    const { data } = await api.post('/auth/forgot-password', { email });
+    return data;
+  },
+
+  async getPasswordRequests(): Promise<{ data: any[] }> {
+    const { data } = await api.get('/auth/password-requests');
+    return data;
+  },
+
+  async adminResetPassword(user_id: string, new_password: string, request_id?: string, is_temporary?: boolean): Promise<any> {
+    const { data } = await api.post('/auth/reset-password', { user_id, new_password, request_id, is_temporary });
+    return data;
+  },
+
   logout() {
     localStorage.removeItem('token');
     localStorage.removeItem('user');

@@ -23,6 +23,10 @@ export default function AppLayout() {
     return <Navigate to="/login" replace />;
   }
 
+  if (user.must_change_password) {
+    return <Navigate to="/force-password-change" replace />;
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-surface-50 dark:bg-surface-900">
       <Sidebar mobileOpen={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} />

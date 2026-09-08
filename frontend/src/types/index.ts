@@ -13,6 +13,7 @@ export interface User {
   is_active: boolean;
   company_id?: string;
   branch_id?: string;
+  must_change_password?: boolean;
   last_login?: string;
   created_at: string;
 }
@@ -543,5 +544,44 @@ export interface VfdApiLog {
   ack_message?: string;
   error_message?: string;
   duration_ms?: number;
+  created_at: string;
+}
+
+export interface DeliveryNote {
+  id: string;
+  delivery_number: string;
+  delivery_date: string;
+  status: DeliveryNoteStatus;
+  customer_id?: string;
+  project_id?: string;
+  invoice_id?: string;
+  delivery_address?: string;
+  delivery_contact_name?: string;
+  delivery_contact_phone?: string;
+  dispatch_date?: string;
+  received_date?: string;
+  received_by_name?: string;
+  notes?: string;
+  prepared_by?: string;
+  created_by?: string;
+  company_id?: string;
+  customer?: Customer;
+  project?: Project;
+  invoice?: Invoice;
+  items?: DeliveryNoteItem[];
+  created_at: string;
+  updated_at?: string;
+}
+
+export type DeliveryNoteStatus = 'pending' | 'dispatched' | 'delivered' | 'cancelled';
+
+export interface DeliveryNoteItem {
+  id: string;
+  delivery_note_id: string;
+  description: string;
+  quantity: number;
+  unit?: string;
+  notes?: string;
+  sort_order?: number;
   created_at: string;
 }

@@ -6,8 +6,10 @@ import { formatDate, formatDateTime, formatCurrency, getUserInitials, getStatusL
 import {
   UserCircle, Plus, Users, CalendarDays, Award, Search,
   X, RefreshCw, Edit2, Check, Trash2,
-  Briefcase, Clock, CheckCircle2, Send, Download, Save,
+  Briefcase, Clock, CheckCircle2, Send, Download, Save, KeyRound, Eye, EyeOff,
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { authService } from '../services/authService';
 
 const roleLabels: Record<string, string> = {
   super_admin: 'Super Admin',
@@ -34,6 +36,8 @@ const attendanceStatusColors: Record<string, string> = {
 };
 
 export default function Employees() {
+  const { user } = useAuth();
+  const isPasswordAdmin = ['super_admin', 'ceo', 'managing_director', 'accountant'].includes(user?.role || '');
   const [employees, setEmployees] = useState<User[]>([]);
   const [allLeaves, setAllLeaves] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -97,6 +101,51 @@ export default function Employees() {
   });
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
+
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetTarget, setResetTarget] = useState<{ user_id: string; name: string } | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [isTemporary, setIsTemporary] = useState(true);
+  const [pwRequests, setPwRequests] = useState<any[]>([]);
+  const [showPwRequests, setShowPwRequests] = useState(false);
+  const [requestsLoading, setRequestsLoading] = useState(false);
+
+  const fetchPasswordRequests = async () => {
+    setRequestsLoading(true);
+    try {
+      const res = await authService.getPasswordRequests();
+      setPwRequests(res?.data || []);
+    } catch (e) { toast.error('Failed to load password reset requests'); }
+    finally { setRequestsLoading(false); }
+  };
+
+  const openResetPassword = (emp: any) => {
+    setResetTarget({ user_id: emp.id, name: `${emp.first_name} ${emp.last_name}` });
+    setResetPassword('');
+    setShowResetPassword(false);
+    setIsTemporary(true);
+    setShowResetModal(true);
+  };
+
+  const handleResetPassword = async () => {
+    if (!resetTarget) return;
+    if (!resetPassword || resetPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+    try {
+      await authService.adminResetPassword(resetTarget.user_id, resetPassword, undefined, isTemporary);
+      toast.success(isTemporary
+        ? `Temporary password set for ${resetTarget.name}. They must change it on next login.`
+        : `Password reset for ${resetTarget.name}`);
+      setShowResetModal(false);
+      setResetTarget(null);
+      setResetPassword('');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Failed to reset password');
+    }
+  };
 
   const roles = [...new Set(employees.map(e => e.role).filter(r => r !== 'customer'))] as string[];
 
@@ -295,6 +344,11 @@ export default function Employees() {
           <p className="page-subtitle">Manage staff, contracts, attendance, and leave</p>
         </div>
         <div className="flex items-center gap-2">
+          {isPasswordAdmin && (
+            <button onClick={() => { setShowPwRequests(!showPwRequests); if (!showPwRequests) fetchPasswordRequests(); }} className="btn-secondary">
+              <KeyRound size={16} className="mr-1" /> Password Requests
+            </button>
+          )}
           <button onClick={() => { fetchAll(); fetchLeaves(); }} className="btn-secondary">
             <RefreshCw size={16} className="mr-1" /> Refresh
           </button>
@@ -303,6 +357,53 @@ export default function Employees() {
           </button>
         </div>
       </div>
+
+      {showPwRequests && (
+        <div className="mb-6 rounded-xl border border-surface-200 p-4 dark:border-surface-700">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-surface-900 dark:text-surface-50">Password Reset Requests</h3>
+            <button onClick={fetchPasswordRequests} className="btn-secondary text-xs py-1 px-2">
+              <RefreshCw size={12} className="mr-1" /> Refresh
+            </button>
+          </div>
+          {requestsLoading ? (
+            <p className="text-sm text-surface-400 text-center py-4">Loading...</p>
+          ) : pwRequests.length === 0 ? (
+            <p className="text-sm text-surface-400 text-center py-4">No password reset requests</p>
+          ) : (
+            <div className="space-y-2">
+              {pwRequests.map((r: any) => {
+                const pending = r.status === 'pending';
+                const emp = r.user;
+                return (
+                  <div key={r.id} className="flex items-center justify-between rounded-lg border border-surface-200 p-3 dark:border-surface-700">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-surface-900 dark:text-surface-50">
+                        {emp ? `${emp.first_name} ${emp.last_name}` : r.email}
+                        {emp?.employee_id && <span className="ml-2 text-xs text-surface-400 font-mono">{emp.employee_id}</span>}
+                      </p>
+                      <p className="text-xs text-surface-400">{emp?.email || r.email} · {emp?.role ? roleLabels[emp.role] || emp.role : ''}</p>
+                      <p className="text-xs text-surface-400 mt-0.5">Requested {formatDateTime(r.created_at)}</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {pending ? (
+                        <span className="badge-warning">Pending</span>
+                      ) : (
+                        <span className={r.status === 'completed' ? 'badge-success' : 'badge-info'}>{getStatusLabel(r.status)}</span>
+                      )}
+                      {pending && (
+                        <button onClick={() => openResetPassword({ id: r.user_id, first_name: emp?.first_name || '', last_name: emp?.last_name || '' })} className="btn-primary text-xs py-1.5 px-3">
+                          <KeyRound size={12} className="mr-1" /> Reset
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-4">
         <div className="stat-card">
@@ -413,9 +514,16 @@ export default function Employees() {
                     <span className={ed.is_active ? 'badge-success' : 'badge-danger'}>
                       {ed.is_active ? 'Active' : 'Inactive'}
                     </span>
-                    <button onClick={() => setEditing(!editing)} className="btn-secondary text-xs py-1.5 px-3">
-                      <Edit2 size={14} className="mr-1" /> {editing ? 'Cancel' : 'Edit'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {isPasswordAdmin && (
+                        <button onClick={() => openResetPassword(ed)} className="btn-secondary text-xs py-1.5 px-3">
+                          <KeyRound size={14} className="mr-1" /> Reset Password
+                        </button>
+                      )}
+                      <button onClick={() => setEditing(!editing)} className="btn-secondary text-xs py-1.5 px-3">
+                        <Edit2 size={14} className="mr-1" /> {editing ? 'Cancel' : 'Edit'}
+                      </button>
+                    </div>
                   </div>
 
                   {editing ? (
@@ -807,6 +915,62 @@ export default function Employees() {
                 <button type="submit" className="btn-primary">Add Employee</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Password Modal */}
+      {showResetModal && resetTarget && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-surface-800">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-surface-900 dark:text-surface-50">Reset Password</h2>
+              <button onClick={() => setShowResetModal(false)} className="rounded-lg p-2 text-surface-400 hover:bg-surface-100"><X size={20} /></button>
+            </div>
+            <p className="text-sm text-surface-500 mb-4">
+              Set a new password for <strong className="text-surface-900 dark:text-surface-50">{resetTarget.name}</strong>. Give them this password directly (by phone or in person).
+            </p>
+            <div>
+              <label className="label">New Password *</label>
+              <div className="relative">
+                <input
+                  type={showResetPassword ? 'text' : 'password'}
+                  className="input w-full pr-11"
+                  value={resetPassword}
+                  onChange={(e) => setResetPassword(e.target.value)}
+                  placeholder="Enter new password (min 6 chars)"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowResetPassword(!showResetPassword)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-surface-400 hover:bg-surface-100 hover:text-surface-700"
+                >
+                  {showResetPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+            <label className="mt-3 flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isTemporary}
+                onChange={(e) => setIsTemporary(e.target.checked)}
+                className="mt-0.5 rounded border-surface-300"
+              />
+              <span className="text-sm text-surface-600 dark:text-surface-300">
+                Temporary password — user must set their own new password on next login.
+              </span>
+            </label>
+            {!isTemporary && (
+              <p className="mt-2 text-xs text-surface-400">
+                Choosing a permanent password lets the user keep this password without being forced to change it.
+              </p>
+            )}
+            <div className="flex justify-end gap-3 pt-5">
+              <button onClick={() => setShowResetModal(false)} className="btn-secondary">Cancel</button>
+              <button onClick={handleResetPassword} className="btn-primary">
+                <KeyRound size={14} className="mr-1" /> Reset Password
+              </button>
+            </div>
           </div>
         </div>
       )}

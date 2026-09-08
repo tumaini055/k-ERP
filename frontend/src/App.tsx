@@ -3,6 +3,7 @@ import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext';
 import AppLayout from './components/layout/AppLayout';
 import Login from './pages/Login';
+import ForcePasswordChange from './pages/ForcePasswordChange';
 import Dashboard from './pages/Dashboard';
 import CRM from './pages/CRM';
 import Projects from './pages/Projects';
@@ -21,6 +22,7 @@ import Settings from './pages/Settings';
 import Profile from './pages/Profile';
 import OfficialLetters from './pages/OfficialLetters';
 import VFD from './pages/VFD';
+import DeliveryNotes from './pages/DeliveryNotes';
 
 export default function App() {
   return (
@@ -35,6 +37,7 @@ export default function App() {
         />
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/force-password-change" element={<ForcePasswordChange />} />
           <Route path="/" element={<AppLayout />}>
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
@@ -55,6 +58,7 @@ export default function App() {
             <Route path="profile" element={<Profile />} />
             <Route path="letters" element={<OfficialLetters />} />
             <Route path="vfd" element={<VFD />} />
+            <Route path="delivery-notes" element={<DeliveryNotes />} />
           </Route>
         </Routes>
       </AuthProvider>

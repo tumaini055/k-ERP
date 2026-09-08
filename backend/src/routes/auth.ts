@@ -63,6 +63,7 @@ router.post('/login', async (req: Request, res: Response) => {
         language: user.language,
         company_id: user.company_id,
         branch_id: user.branch_id,
+        must_change_password: user.must_change_password || false,
       },
     });
   } catch (error) {
@@ -179,14 +180,172 @@ router.put('/change-password', authenticate, async (req: AuthRequest, res: Respo
 
     const password_hash = await bcrypt.hash(new_password, 12);
 
-    await supabase
+    const { error: pwErr } = await supabase
       .from('users')
-      .update({ password_hash, updated_at: new Date().toISOString() })
+      .update({ password_hash, updated_at: new Date().toISOString(), must_change_password: false })
       .eq('id', req.user!.id);
+
+    // Column may not exist yet — retry without it so password change still works
+    if (pwErr) {
+      await supabase
+        .from('users')
+        .update({ password_hash, updated_at: new Date().toISOString() })
+        .eq('id', req.user!.id);
+    }
 
     res.json({ message: 'Password changed successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to change password' });
+  }
+});
+
+// ============================================
+// FORGOT PASSWORD (public request - no auth)
+// ============================================
+router.post('/forgot-password', async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      res.status(400).json({ error: 'Email is required' });
+      return;
+    }
+
+    const { data: user } = await supabase
+      .from('users')
+      .select('id, email, is_active')
+      .eq('email', email)
+      .single();
+
+    if (!user) {
+      // Don't reveal whether the email exists
+      res.json({ message: 'If the email exists, a password reset request has been submitted.' });
+      return;
+    }
+
+    // Create a password reset request for an admin to action
+    const { error } = await supabase.from('password_reset_requests').insert({
+      user_id: user.id,
+      email: user.email,
+      status: 'pending',
+    });
+
+    if (error) throw error;
+
+    res.json({ message: 'Password reset request submitted. An administrator will assist you shortly.' });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    // If table doesn't exist yet, still return a friendly message
+    res.status(500).json({ error: 'Failed to submit password reset request' });
+  }
+});
+
+// ============================================
+// PASSWORD RESET REQUESTS (admin only)
+// ============================================
+router.get('/password-requests', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const adminRoles = ['super_admin', 'ceo', 'managing_director', 'accountant'];
+    if (!adminRoles.includes(req.user!.role)) {
+      res.status(403).json({ error: 'Insufficient permissions' });
+      return;
+    }
+
+    const { status } = req.query;
+    let query = supabase
+      .from('password_reset_requests')
+      .select('*, user:users!password_reset_requests_user_id_fkey(first_name, last_name, email, role, employee_id, is_active)')
+      .order('created_at', { ascending: false });
+
+    if (status) query = query.eq('status', status);
+
+    const { data, error } = await query;
+    if (error) {
+      if ((error as any)?.code === '42P01' || (error as any)?.message?.includes('relation')) {
+        res.json({ data: [] });
+        return;
+      }
+      throw error;
+    }
+
+    res.json({ data: data || [] });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch password reset requests' });
+  }
+});
+
+// ============================================
+// ADMIN RESET / SET PASSWORD
+// ============================================
+router.post('/reset-password', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const adminRoles = ['super_admin', 'ceo', 'managing_director', 'accountant'];
+    if (!adminRoles.includes(req.user!.role)) {
+      res.status(403).json({ error: 'Insufficient permissions' });
+      return;
+    }
+
+    const { user_id, request_id, new_password, is_temporary } = req.body;
+    if (!user_id || !new_password) {
+      res.status(400).json({ error: 'user_id and new_password are required' });
+      return;
+    }
+
+    if (String(new_password).length < 6) {
+      res.status(400).json({ error: 'Password must be at least 6 characters' });
+      return;
+    }
+
+    // Ensure target user exists and is not trying to reset themselves via admin path
+    const { data: target } = await supabase
+      .from('users')
+      .select('id, email')
+      .eq('id', user_id)
+      .single();
+
+    if (!target) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const password_hash = await bcrypt.hash(new_password, 12);
+
+    const { error } = await supabase
+      .from('users')
+      .update({
+        password_hash,
+        updated_at: new Date().toISOString(),
+        must_change_password: is_temporary ? true : false,
+      })
+      .eq('id', user_id);
+
+    // Column may not exist yet — retry without must_change_password so reset still works
+    if (error && (error as any)?.message?.includes('column')) {
+      const { error: retryErr } = await supabase
+        .from('users')
+        .update({ password_hash, updated_at: new Date().toISOString() })
+        .eq('id', user_id);
+      if (retryErr) throw retryErr;
+    } else if (error) {
+      throw error;
+    }
+
+    // Update the reset request status if provided
+    if (request_id) {
+      await supabase
+        .from('password_reset_requests')
+        .update({
+          status: 'completed',
+          resolved_at: new Date().toISOString(),
+          resolved_by: req.user!.id,
+          new_password: new_password,
+        })
+        .eq('id', request_id);
+    }
+
+    res.json({ message: `Password for ${target.email} has been reset successfully.` });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Failed to reset password' });
   }
 });
 

@@ -24,6 +24,7 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     { module: 'settings', canView: true, canCreate: true, canEdit: true, canDelete: true },
     { module: 'users', canView: true, canCreate: true, canEdit: true, canDelete: true },
     { module: 'vfd', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'delivery', canView: true, canCreate: true, canEdit: true, canDelete: true },
   ],
   ceo: [
     { module: 'dashboard', canView: true, canCreate: true, canEdit: true, canDelete: true },
@@ -43,6 +44,7 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     { module: 'settings', canView: true, canCreate: true, canEdit: true, canDelete: true },
     { module: 'users', canView: true, canCreate: true, canEdit: true, canDelete: true },
     { module: 'vfd', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'delivery', canView: true, canCreate: true, canEdit: true, canDelete: true },
   ],
   managing_director: [
     { module: 'dashboard', canView: true, canCreate: true, canEdit: true, canDelete: true },
@@ -62,6 +64,7 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     { module: 'settings', canView: true, canCreate: true, canEdit: true, canDelete: true },
     { module: 'users', canView: true, canCreate: true, canEdit: true, canDelete: true },
     { module: 'vfd', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'delivery', canView: true, canCreate: true, canEdit: true, canDelete: true },
   ],
   accountant: [
     { module: 'dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },
@@ -73,6 +76,7 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     { module: 'reports', canView: true, canCreate: true, canEdit: false, canDelete: false },
     { module: 'settings', canView: true, canCreate: false, canEdit: false, canDelete: false },
     { module: 'vfd', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'delivery', canView: true, canCreate: true, canEdit: true, canDelete: false },
   ],
   engineer: [
     { module: 'dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },
@@ -81,6 +85,7 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     { module: 'inventory', canView: true, canCreate: false, canEdit: false, canDelete: false },
     { module: 'documents', canView: true, canCreate: false, canEdit: false, canDelete: false },
     { module: 'settings', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'delivery', canView: true, canCreate: false, canEdit: true, canDelete: false },
   ],
   marketing_officer: [
     { module: 'dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },

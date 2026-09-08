@@ -300,18 +300,13 @@ router.get('/invoices/:id/pdf', checkPermission('finance', 'canView'), async (re
         const itemTotal = Number(item.total_price || 0);
         grandTotal += itemTotal;
 
-        if (i % 2 === 0) {
-          doc.rect(colX[0], y, tableWidth, rowH).fill('#f9fafb');
-        }
-        doc.fillColor('#374151');
-        doc.text(String(i + 1), colX[0], y + 5, { width: colW[0], align: 'center' });
-        doc.text(item.description || '\u2014', colX[1] + 4, y + 5, { width: colW[1] - 8, align: 'left' });
-        doc.text(String(item.quantity), colX[2], y + 5, { width: colW[2], align: 'center' });
-        doc.text(`${currencySymbol}${Number(item.unit_price).toLocaleString('en-US', { minimumFractionDigits: 2 })}`, colX[3], y + 5, { width: colW[3], align: 'right' });
-        doc.text(`${currencySymbol}${itemTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}`, colX[4], y + 5, { width: colW[4], align: 'right' });
-        y += rowH;
+        const desc = item.description || '\u2014';
+        const descText = desc.length > 250 ? desc.slice(0, 250) + '...' : desc;
+        const descH = doc.heightOfString(descText, { width: colW[1] - 8 });
+        const descLines = Math.max(Math.ceil(descH / 12), 1);
+        const rh = Math.max(rowH, descLines * 13 + 8);
 
-        if (y > 730) {
+        if (y + rh > (doc.page.height - 45)) {
           doc.moveTo(colX[0], y).lineTo(colX[0] + tableWidth, y).strokeColor('#e5e7eb').lineWidth(0.5).stroke();
           doc.addPage();
           y = 45;
@@ -323,6 +318,17 @@ router.get('/invoices/:id/pdf', checkPermission('finance', 'canView'), async (re
           y += headerH;
           doc.fontSize(8.5).font('Helvetica').fillColor('#374151');
         }
+
+        if (i % 2 === 0) {
+          doc.rect(colX[0], y, tableWidth, rh).fill('#f9fafb');
+        }
+        doc.fillColor('#374151');
+        doc.text(String(i + 1), colX[0], y + (rh - 9) / 2, { width: colW[0], align: 'center' });
+        doc.text(descText, colX[1] + 4, y + 5, { width: colW[1] - 8, align: 'left' });
+        doc.text(String(item.quantity), colX[2], y + (rh - 9) / 2, { width: colW[2], align: 'center' });
+        doc.text(`${currencySymbol}${Number(item.unit_price).toLocaleString('en-US', { minimumFractionDigits: 2 })}`, colX[3], y + (rh - 9) / 2, { width: colW[3], align: 'right' });
+        doc.text(`${currencySymbol}${itemTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}`, colX[4], y + (rh - 9) / 2, { width: colW[4], align: 'right' });
+        y += rh;
       }
     }
 
@@ -712,16 +718,13 @@ router.get('/invoices/:id/receipt', checkPermission('finance', 'canView'), async
         const itemTotal = Number(item.total_price || 0);
         grandTotal += itemTotal;
 
-        if (i % 2 === 0) doc.rect(colX[0], y, tableWidth, rowH).fill('#f9fafb');
-        doc.fillColor('#374151');
-        doc.text(String(i + 1), colX[0], y + 5, { width: colW[0], align: 'center' });
-        doc.text(item.description || '\u2014', colX[1] + 4, y + 5, { width: colW[1] - 8, align: 'left' });
-        doc.text(String(item.quantity), colX[2], y + 5, { width: colW[2], align: 'center' });
-        doc.text(`${currencySymbol}${Number(item.unit_price).toLocaleString('en-US', { minimumFractionDigits: 2 })}`, colX[3], y + 5, { width: colW[3], align: 'right' });
-        doc.text(`${currencySymbol}${itemTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}`, colX[4], y + 5, { width: colW[4], align: 'right' });
-        y += rowH;
+        const desc = item.description || '\u2014';
+        const descText = desc.length > 250 ? desc.slice(0, 250) + '...' : desc;
+        const descH = doc.heightOfString(descText, { width: colW[1] - 8 });
+        const descLines = Math.max(Math.ceil(descH / 12), 1);
+        const rh = Math.max(rowH, descLines * 13 + 8);
 
-        if (y > 700) {
+        if (y + rh > (doc.page.height - 45)) {
           doc.moveTo(colX[0], y).lineTo(colX[0] + tableWidth, y).strokeColor('#e5e7eb').lineWidth(0.5).stroke();
           doc.addPage();
           y = 45;
@@ -733,6 +736,15 @@ router.get('/invoices/:id/receipt', checkPermission('finance', 'canView'), async
           y += headerH;
           doc.fontSize(8.5).font('Helvetica').fillColor('#374151');
         }
+
+        if (i % 2 === 0) doc.rect(colX[0], y, tableWidth, rh).fill('#f9fafb');
+        doc.fillColor('#374151');
+        doc.text(String(i + 1), colX[0], y + (rh - 9) / 2, { width: colW[0], align: 'center' });
+        doc.text(descText, colX[1] + 4, y + 5, { width: colW[1] - 8, align: 'left' });
+        doc.text(String(item.quantity), colX[2], y + (rh - 9) / 2, { width: colW[2], align: 'center' });
+        doc.text(`${currencySymbol}${Number(item.unit_price).toLocaleString('en-US', { minimumFractionDigits: 2 })}`, colX[3], y + (rh - 9) / 2, { width: colW[3], align: 'right' });
+        doc.text(`${currencySymbol}${itemTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}`, colX[4], y + (rh - 9) / 2, { width: colW[4], align: 'right' });
+        y += rh;
       }
     }
 

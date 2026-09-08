@@ -629,6 +629,63 @@ export const dataService = {
     window.URL.revokeObjectURL(url);
   },
 
+  // Download Project Handover Document
+  async downloadProjectHandover(projectId: string, quotationId?: string) {
+    try {
+      const token = localStorage.getItem('token');
+      const query = quotationId ? `?quotation_id=${quotationId}` : '';
+      const res = await fetch(`/api/projects/${projectId}/handover${query}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || `Download failed: ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const contentDisp = res.headers.get('content-disposition');
+      const match = contentDisp?.match(/filename="(.+?)"/);
+      a.download = match ? match[1] : `project-${projectId}-handover.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Handover download failed:', err);
+      throw err;
+    }
+  },
+
+  // Upload Handover Photos (up to 4)
+  async uploadHandoverPhotos(projectId: string, files: File[]) {
+    const token = localStorage.getItem('token');
+    const fd = new FormData();
+    files.forEach((f) => fd.append('photos', f));
+    const res = await fetch(`/api/projects/${projectId}/handover/photos`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: fd,
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(errText || `Upload failed: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  // List Handover Photos for a project
+  async getHandoverPhotos(projectId: string): Promise<string[]> {
+    const token = localStorage.getItem('token');
+    const res = await fetch(`/api/projects/${projectId}/handover/photos`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error(`Failed to load photos: ${res.status}`);
+    const data = await res.json();
+    return data.photos || [];
+  },
+
   // Reports
   async getProfitLoss(params?: any) {
     const { data } = await api.get('/reports/profit-loss', { params });
@@ -910,6 +967,54 @@ export const dataService = {
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Letter PDF generation failed:', err);
+      throw err;
+    }
+  },
+
+  // Delivery Notes
+  async getDeliveryNotes(params?: any) {
+    const { data } = await api.get('/delivery-notes', { params });
+    return data;
+  },
+  async getDeliveryNote(id: string) {
+    const { data } = await api.get(`/delivery-notes/${id}`);
+    return data;
+  },
+  async createDeliveryNote(body: any) {
+    const { data } = await api.post('/delivery-notes', body);
+    return data;
+  },
+  async updateDeliveryNote(id: string, body: any) {
+    const { data } = await api.put(`/delivery-notes/${id}`, body);
+    return data;
+  },
+  async deleteDeliveryNote(id: string) {
+    const { data } = await api.delete(`/delivery-notes/${id}`);
+    return data;
+  },
+  async downloadDeliveryNotePdf(id: string) {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/delivery-notes/${id}/pdf`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || `Download failed: ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const contentDisp = res.headers.get('content-disposition');
+      const match = contentDisp?.match(/filename="(.+?)"/);
+      a.download = match ? match[1] : `delivery-note-${id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Delivery note PDF download failed:', err);
       throw err;
     }
   },
