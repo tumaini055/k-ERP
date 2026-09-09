@@ -971,6 +971,39 @@ export const dataService = {
     }
   },
 
+  // Company Presentations (PDF / PowerPoint)
+  async generatePresentation(body: any, format: 'pdf' | 'pptx') {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/letters/presentation/${format}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': token ? `Bearer ${token}` : '',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || `Presentation generation failed: ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const contentDisp = res.headers.get('content-disposition');
+      const match = contentDisp?.match(/filename="(.+?)"/);
+      a.download = match ? match[1] : `presentation-${Date.now()}.${format === 'pdf' ? 'pdf' : 'pptx'}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Company presentation generation failed:', err);
+      throw err;
+    }
+  },
+
   // Delivery Notes
   async getDeliveryNotes(params?: any) {
     const { data } = await api.get('/delivery-notes', { params });

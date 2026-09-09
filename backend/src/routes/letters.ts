@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { supabase } from '../config/supabase';
 import { authenticate, checkPermission, AuthRequest } from '../middleware/auth';
+import { buildPresentationPdf, buildPresentationPptx, normalizeSlides, CompanyInfo } from '../services/presentation';
 import path from 'path';
 import fs from 'fs';
 
@@ -210,6 +211,80 @@ router.post('/generate', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Letter PDF generation error:', error);
     res.status(500).json({ error: 'Failed to generate letter' });
+  }
+});
+
+// ============================================
+// COMPANY PRESENTATIONS (PDF & PowerPoint)
+// ============================================
+async function getCompanyInfo(user: AuthRequest['user']): Promise<CompanyInfo> {
+  let companyName = 'K-Connect Technologies';
+  let companyEmail = 'info@kconnect.co.tz';
+  let companyWebsite = 'www.kconnect.co.tz';
+  let companyAddress = '';
+  let companyPhone = '';
+  let taxId = '';
+  let logoUrl = '';
+  const companyId = await resolveCompanyId(user!.id, user?.company_id);
+  if (companyId) {
+    const { data: cs } = await supabase
+      .from('company_settings')
+      .select('settings')
+      .eq('company_id', companyId)
+      .single();
+    if (cs?.settings) {
+      const s = cs.settings;
+      if (s.company_name) companyName = s.company_name;
+      if (s.company_email) companyEmail = s.company_email;
+      if (s.company_website) companyWebsite = s.company_website;
+      if (s.company_address) companyAddress = s.company_address;
+      if (s.company_phone) companyPhone = s.company_phone;
+      if (s.tax_id) taxId = s.tax_id;
+      if (s.logo_url) logoUrl = s.logo_url;
+    }
+  }
+  return { companyName, companyEmail, companyPhone, companyWebsite, companyAddress, taxId, logoUrl };
+}
+
+async function preparePresentation(req: AuthRequest) {
+  const base = await getCompanyInfo(req.user!);
+  const b = req.body || {};
+  const info: CompanyInfo = { ...base };
+  const overrides: Record<string, keyof CompanyInfo> = {
+    company_name: 'companyName',
+    company_email: 'companyEmail',
+    company_phone: 'companyPhone',
+    company_website: 'companyWebsite',
+    company_address: 'companyAddress',
+    tax_id: 'taxId',
+    logo_url: 'logoUrl',
+  };
+  for (const [key, target] of Object.entries(overrides)) {
+    if (typeof b[key] === 'string' && b[key].trim()) info[target] = b[key].trim();
+  }
+  const title = typeof b.title === 'string' && b.title.trim() ? b.title.trim() : `${info.companyName} Company Profile`;
+  const tagline = typeof b.tagline === 'string' ? b.tagline.trim() : '';
+  const slides = normalizeSlides(b.slides, info.companyName);
+  return { info, title, tagline, slides };
+}
+
+router.post('/presentation/pdf', async (req: AuthRequest, res: Response) => {
+  try {
+    const { info, title, tagline, slides } = await preparePresentation(req);
+    buildPresentationPdf(res, info, title, tagline, slides);
+  } catch (error) {
+    console.error('Presentation PDF generation error:', error);
+    if (!res.headersSent) res.status(500).json({ error: 'Failed to generate PDF presentation' });
+  }
+});
+
+router.post('/presentation/pptx', async (req: AuthRequest, res: Response) => {
+  try {
+    const { info, title, tagline, slides } = await preparePresentation(req);
+    await buildPresentationPptx(res, info, title, tagline, slides);
+  } catch (error) {
+    console.error('Presentation PPTX generation error:', error);
+    if (!res.headersSent) res.status(500).json({ error: 'Failed to generate PowerPoint presentation' });
   }
 });
 
