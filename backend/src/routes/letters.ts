@@ -1,9 +1,10 @@
 import { Router, Response } from 'express';
 import { supabase } from '../config/supabase';
 import { authenticate, checkPermission, AuthRequest } from '../middleware/auth';
-import { buildPresentationPdf, buildPresentationPptx, normalizeSlides, CompanyInfo } from '../services/presentation';
+import { buildPresentationPdf, buildPresentationPptx, normalizeSlides, CompanyInfo, PresentationSlide } from '../services/presentation';
 import path from 'path';
 import fs from 'fs';
+import multer from 'multer';
 
 const router = Router();
 
@@ -246,7 +247,7 @@ async function getCompanyInfo(user: AuthRequest['user']): Promise<CompanyInfo> {
   return { companyName, companyEmail, companyPhone, companyWebsite, companyAddress, taxId, logoUrl };
 }
 
-async function preparePresentation(req: AuthRequest) {
+async function preparePresentationMeta(req: AuthRequest) {
   const base = await getCompanyInfo(req.user!);
   const b = req.body || {};
   const info: CompanyInfo = { ...base };
@@ -264,9 +265,75 @@ async function preparePresentation(req: AuthRequest) {
   }
   const title = typeof b.title === 'string' && b.title.trim() ? b.title.trim() : `${info.companyName} Company Profile`;
   const tagline = typeof b.tagline === 'string' ? b.tagline.trim() : '';
-  const slides = normalizeSlides(b.slides, info.companyName);
-  return { info, title, tagline, slides };
+  return { info, title, tagline };
 }
+
+async function preparePresentation(req: AuthRequest) {
+  const meta = await preparePresentationMeta(req);
+  const slides = normalizeSlides(req.body?.slides, meta.info.companyName);
+  return { ...meta, slides };
+}
+
+// ============================================
+// PDF TO POWERPOINT CONVERSION
+// ============================================
+const pdfUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+
+async function pdfToSlides(data: Buffer, maxPages = 30): Promise<PresentationSlide[]> {
+  const pdfParse = require('pdf-parse');
+  const parser = new pdfParse.PDFParse({ data });
+  try {
+    const result = await parser.getText({ lineEnforce: true });
+    const pageTexts = (result.pages || [])
+      .slice(0, maxPages)
+      .map((p: any) => String(p.text || '').trim())
+      .filter(Boolean);
+    return pageTexts.map((pageText: string, idx: number) => {
+      const lines = pageText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      const first = lines[0];
+      const isPageLabel = /^\d{1,3}$/.test(first || '');
+      if (lines.length > 1 && first && first.length <= 100 && !isPageLabel) {
+        return { title: first, content: lines.slice(1).join('\n') || pageText };
+      }
+      return { title: `Page ${idx + 1}`, content: pageText };
+    });
+  } finally {
+    try { await parser.destroy(); } catch (_) {}
+  }
+}
+
+router.post('/presentation/from-pdf', (req, res, next) => {
+  pdfUpload.single('file')(req, res, (err: any) => {
+    if (err) {
+      const msg = err?.code === 'LIMIT_FILE_SIZE' ? 'PDF file is too large (max 25MB)' : 'File upload failed';
+      res.status(400).json({ error: msg });
+      return;
+    }
+    next();
+  });
+}, async (req: AuthRequest, res: Response) => {
+  try {
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ error: 'Please attach a PDF file' });
+      return;
+    }
+    if (!/\.pdf$/i.test(file.originalname) && file.mimetype !== 'application/pdf') {
+      res.status(400).json({ error: 'Only PDF files are supported' });
+      return;
+    }
+    const slides = await pdfToSlides(file.buffer);
+    if (slides.length === 0) {
+      res.status(400).json({ error: 'No readable text found in the PDF. The file may be scanned or image-only.' });
+      return;
+    }
+    const { info, title, tagline } = await preparePresentationMeta(req);
+    await buildPresentationPptx(res, info, title, tagline, slides);
+  } catch (error) {
+    console.error('PDF to PowerPoint conversion error:', error);
+    if (!res.headersSent) res.status(500).json({ error: 'Failed to convert the PDF to PowerPoint' });
+  }
+});
 
 router.post('/presentation/pdf', async (req: AuthRequest, res: Response) => {
   try {

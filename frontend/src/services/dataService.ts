@@ -1004,6 +1004,37 @@ export const dataService = {
     }
   },
 
+  async convertPdfToPptx(formData: FormData) {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/letters/presentation/from-pdf', {
+        method: 'POST',
+        headers: { 'Authorization': token ? `Bearer ${token}` : '' },
+        body: formData,
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        let msg = errText || `Conversion failed: ${res.status}`;
+        try { const j = JSON.parse(errText); if (j?.error) msg = j.error; } catch { /* ignore */ }
+        throw new Error(msg);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const contentDisp = res.headers.get('content-disposition');
+      const match = contentDisp?.match(/filename="(.+?)"/);
+      a.download = match ? match[1] : `presentation-${Date.now()}.pptx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('PDF to PowerPoint conversion failed:', err);
+      throw err;
+    }
+  },
+
   // Delivery Notes
   async getDeliveryNotes(params?: any) {
     const { data } = await api.get('/delivery-notes', { params });

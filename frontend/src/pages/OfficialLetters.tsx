@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { dataService } from '../services/dataService';
 import { Customer } from '../types';
 import {
-  FileText, RefreshCw, UserCheck, UserPlus, Presentation, FileCode2, Plus, Trash2, ChevronUp, ChevronDown,
+  FileText, RefreshCw, UserCheck, UserPlus, Presentation, FileCode2, Plus, Trash2, ChevronUp, ChevronDown, Upload,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -51,6 +51,8 @@ export default function OfficialLetters() {
     company_address: '',
   });
   const [presBusy, setPresBusy] = useState<'pdf' | 'pptx' | null>(null);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   useEffect(() => {
     dataService.getCustomers({ limit: 500 }).then((r) => setCustomers(r.data)).catch(() => {});
@@ -155,6 +157,28 @@ export default function OfficialLetters() {
   };
 
   const setPresField = (key: keyof typeof pres, value: string) => setPres((p) => ({ ...p, [key]: value }));
+
+  const handleConvertPdf = async () => {
+    if (!pdfFile) { toast.error('Please choose a PDF file'); return; }
+    setPdfBusy(true);
+    try {
+      const form = new FormData();
+      form.append('file', pdfFile);
+      form.append('title', pres.title.trim());
+      form.append('tagline', pres.tagline.trim());
+      form.append('company_name', pres.company_name.trim());
+      form.append('company_email', pres.company_email.trim());
+      form.append('company_phone', pres.company_phone.trim());
+      form.append('company_website', pres.company_website.trim());
+      form.append('company_address', pres.company_address.trim());
+      await dataService.convertPdfToPptx(form);
+      toast.success('PowerPoint generated from PDF');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to convert PDF to PowerPoint');
+    } finally {
+      setPdfBusy(false);
+    }
+  };
 
   return (
     <div className="page-container">
@@ -366,9 +390,37 @@ The letter will be formatted with:
             </div>
           </div>
 
-          {/* Right - Slides + actions */}
+          {/* Right - PDF converter + slides + actions */}
           <div className="lg:col-span-2">
             <div className="card p-5">
+              <div className="mb-3 flex items-center gap-2">
+                <Upload size={16} className="text-primary-600" />
+                <h2 className="text-sm font-semibold text-surface-800 dark:text-surface-200">Convert PDF to PowerPoint</h2>
+              </div>
+              <p className="mb-3 text-xs text-surface-400">
+                Upload an existing PDF and each page becomes a branded slide. The deck gets a company cover,
+                letterhead-style headers with the details above, and a closing contact slide.
+              </p>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <label className="input flex cursor-pointer items-center gap-2" title="Choose a PDF file">
+                  <Upload size={15} className="shrink-0 text-surface-400" />
+                  <span className="truncate text-sm text-surface-500 dark:text-surface-400">
+                    {pdfFile ? pdfFile.name : 'Choose a PDF file...'}
+                  </span>
+                  <input
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    className="hidden"
+                    onChange={(e) => setPdfFile(e.target.files?.[0] || null)}
+                  />
+                </label>
+                <button className="btn-primary shrink-0" disabled={pdfBusy} onClick={handleConvertPdf}>
+                  {pdfBusy ? <>Converting...</> : <><FileCode2 size={16} /> Convert to PPTX</>}
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 card p-5">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-surface-800 dark:text-surface-200">
                   Slide Content {slides.length > 0 && <span className="ml-1 text-xs font-normal text-surface-400">({slides.length} slide{slides.length === 1 ? '' : 's'})</span>}
