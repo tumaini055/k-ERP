@@ -66,7 +66,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-const apiPrefix = process.env.VERCEL ? '' : '/api';
+const apiPrefix = '/api';
 
 app.use(`${apiPrefix}/auth`, authRoutes);
 app.use(`${apiPrefix}/customers`, customerRoutes);

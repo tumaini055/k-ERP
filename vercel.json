@@ -1,17 +1,22 @@
 {
-    "experimentalServices": {
-        "frontend": {
-            "root": "frontend",
-            "routePrefix": "/",
-            "framework": "vite"
+    "version": 2,
+    "builds": [
+        {
+            "src": "/backend/src/index.ts",
+            "use": "@vercel/node"
         },
-        "backend": {
-            "root": "backend",
-            "routePrefix": "/api",
-            "entrypoint": "src/index.ts"
+        {
+            "src": "/frontend/package.json",
+            "use": "@vercel/static-build",
+            "config": {
+                "distDir": "dist"
+            }
         }
-    },
+    ],
     "routes": [
-        { "src": "/uploads/(.*)", "dest": "backend/src/index.ts" }
+        { "src": "/api/(.*)", "dest": "/backend/src/index.ts" },
+        { "src": "/uploads/(.*)", "dest": "/backend/src/index.ts" },
+        { "handle": "filesystem" },
+        { "src": "/(.*)", "dest": "/index.html" }
     ]
 }
