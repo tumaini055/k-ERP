@@ -886,6 +886,9 @@ router.get('/invoices', checkPermission('finance', 'canView'), async (req: AuthR
       .from('invoices')
       .select('*, customer:customers!invoices_customer_id_fkey(company_name, contact_person)', { count: 'exact' });
 
+    const companyId = await resolveCompanyId(req.user!.id, req.user?.company_id);
+    if (companyId) query = query.eq('company_id', companyId);
+
     if (status) query = query.eq('status', status);
     if (type) query = query.eq('invoice_type', type);
     if (customer_id) query = query.eq('customer_id', customer_id);
